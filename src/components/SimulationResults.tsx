@@ -14,7 +14,7 @@ interface SimulationResultsProps {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-6 text-[13px] font-semibold uppercase tracking-wide text-foreground/70">
+    <h2 className="mb-4 sm:mb-6 text-[13px] font-semibold uppercase tracking-wide text-foreground/70">
       {children}
     </h2>
   );
@@ -149,17 +149,17 @@ export default function SimulationResults({
 
   return (
     <div
-      className="mx-auto w-full max-w-4xl px-8 py-12 lg:px-16"
+      className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-12 lg:px-16"
       style={{ animation: "fade-in 300ms ease" }}
     >
       {/* ── Section A: Header ─────────────────────────────────── */}
-      <div className="mb-10">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+      <div className="mb-8 sm:mb-10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
             <p className="text-[13px] font-semibold uppercase tracking-wide text-foreground/70">
               Simulation Report
             </p>
-            <h1 className="mt-1 font-serif text-2xl font-semibold leading-snug">
+            <h1 className="mt-1 font-serif text-xl sm:text-2xl font-semibold leading-snug">
               {formData.policyType}: {formData.category}
             </h1>
           </div>
@@ -175,12 +175,12 @@ export default function SimulationResults({
           </div>
         </div>
 
-        <blockquote className="mt-5 border-l-2 border-accent pl-4 text-[15px] leading-relaxed text-muted">
+        <blockquote className="mt-4 sm:mt-5 border-l-2 border-accent pl-4 text-sm sm:text-[15px] leading-relaxed text-muted">
           {result.policy_summary}
         </blockquote>
 
         {/* Metadata grid */}
-        <div className="mt-5 grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
+        <div className="mt-4 sm:mt-5 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 sm:gap-x-8">
           {formData.location && (
             <div>
               <p className="text-xs text-muted-light">Location</p>
@@ -223,25 +223,25 @@ export default function SimulationResults({
       <hr className="border-border-light" />
 
       {/* ── Section B: Sustainability Score ────────────────────── */}
-      <section className="py-10">
+      <section className="py-8 sm:py-10">
         <SectionLabel>Overall Sustainability Score</SectionLabel>
-        <div className="flex items-end gap-6">
+        <div className="flex items-end gap-4 sm:gap-6">
           <div>
             <p className="text-xs text-muted-light">Before</p>
-            <span className="font-serif text-3xl font-bold leading-none text-muted-light">
+            <span className="font-serif text-2xl sm:text-3xl font-bold leading-none text-muted-light">
               {result.sustainability_score?.before ?? "—"}
             </span>
           </div>
-          <div className="text-2xl text-muted-light">&rarr;</div>
+          <div className="text-xl sm:text-2xl text-muted-light">&rarr;</div>
           <div>
             <p className="text-xs text-accent">After</p>
-            <span className="font-serif text-[4.5rem] font-bold leading-none">
+            <span className="font-serif text-5xl sm:text-[4.5rem] font-bold leading-none">
               {afterScore}
             </span>
-            <span className="ml-1 text-xl text-muted-light">/100</span>
+            <span className="ml-1 text-base sm:text-xl text-muted-light">/100</span>
           </div>
           {afterScore > (result.sustainability_score?.before ?? 0) && (
-            <span className="mb-2 text-sm font-semibold text-green-600">
+            <span className="mb-1 sm:mb-2 text-sm font-semibold text-green-600">
               +{afterScore - (result.sustainability_score?.before ?? 0)}
             </span>
           )}
@@ -255,7 +255,7 @@ export default function SimulationResults({
 
         {/* Breakdown */}
         {result.sustainability_score?.breakdown && (
-          <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-5">
+          <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5 sm:gap-x-8">
             {Object.entries(result.sustainability_score?.breakdown ?? {}).map(
               ([key, val]) => (
                 <div key={key}>
@@ -276,23 +276,23 @@ export default function SimulationResults({
       {/* ── Section C: Historical Precedents (Evidence) ────────── */}
       {result.historical_precedents?.length > 0 && (
         <>
-          <section className="py-10">
+          <section className="py-8 sm:py-10">
             <SectionLabel>Historical Precedents</SectionLabel>
-            <p className="mb-6 text-sm text-muted">
+            <p className="mb-4 sm:mb-6 text-sm text-muted">
               Past policies from the knowledge graph used as evidence for this
               simulation.
             </p>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {result.historical_precedents.map((p, i) => (
                 <div
                   key={i}
-                  className="border-l-2 border-accent/40 bg-surface/50 py-3 pl-5 pr-4"
+                  className="border-l-2 border-accent/40 bg-surface/50 py-3 pl-4 pr-3 sm:pl-5 sm:pr-4"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-[15px] font-semibold">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                    <h3 className="text-sm sm:text-[15px] font-semibold">
                       {p.policy_name}
                     </h3>
-                    <span className="shrink-0 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+                    <span className="self-start shrink-0 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
                       Precedent
                     </span>
                   </div>
@@ -317,9 +317,9 @@ export default function SimulationResults({
       )}
 
       {/* ── Section D: Impact Assessment ──────────────────────── */}
-      <section className="py-10">
+      <section className="py-8 sm:py-10">
         <SectionLabel>Impact Assessment</SectionLabel>
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           {Object.entries(result.impact_scores ?? {}).map(([key, dim]) => {
             const color = DIMENSION_COLORS[key] ?? "#6B7280";
             const label = DIMENSION_LABELS[key] ?? key;
@@ -337,13 +337,13 @@ export default function SimulationResults({
 
             return (
               <div key={key} className="border-l-2 w-full" style={{ borderColor: color }}>
-                <div className="flex items-baseline justify-between gap-4 pl-5 pr-1">
-                  <h3 className="text-[15px] font-semibold leading-snug">
+                <div className="flex flex-col gap-1 pl-4 pr-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 sm:pl-5">
+                  <h3 className="text-sm sm:text-[15px] font-semibold leading-snug">
                     {label}
                   </h3>
-                  <div className="flex items-baseline gap-1.5">
+                  <div className="flex items-baseline gap-1.5 shrink-0">
                     <span
-                      className="font-serif text-2xl font-bold leading-none"
+                      className="font-serif text-xl sm:text-2xl font-bold leading-none"
                       style={{ color }}
                     >
                       {dim.score > 0 ? "+" : ""}
@@ -358,10 +358,10 @@ export default function SimulationResults({
                     </span>
                   </div>
                 </div>
-                <div className="mt-2.5 ml-5 mr-1 h-1 bg-border-light">
+                <div className="mt-2.5 ml-4 mr-1 h-1 bg-border-light sm:ml-5">
                   <ScoreBar value={pct} max={100} color={color} />
                 </div>
-                <p className="mt-3 pl-5 pr-1 text-sm leading-relaxed text-muted">
+                <p className="mt-3 pl-4 pr-1 text-sm leading-relaxed text-muted sm:pl-5">
                   {dim.reasoning}
                 </p>
               </div>
@@ -373,16 +373,16 @@ export default function SimulationResults({
       <hr className="border-border-light" />
 
       {/* ── Section E: Projected Timeline ─────────────────────── */}
-      <section className="py-10">
+      <section className="py-8 sm:py-10">
         <SectionLabel>Projected Timeline</SectionLabel>
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
           {result.simulation_timeline.map((m, i) => (
-            <div key={i} className="flex gap-4">
+            <div key={i} className="flex gap-3 sm:gap-4">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center bg-foreground text-xs font-medium text-background">
                 {i + 1}
               </span>
-              <div className="flex-1">
-                <p className="text-[15px]">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm sm:text-[15px]">
                   <span className="font-semibold">{m.period}</span>
                   <span className="text-muted"> &mdash; {m.label}</span>
                   {m.sustainability_delta !== 0 && (
@@ -406,9 +406,9 @@ export default function SimulationResults({
       <hr className="border-border-light" />
 
       {/* ── Section F: Stakeholder Perspectives ───────────────── */}
-      <section className="py-10">
+      <section className="py-8 sm:py-10">
         <SectionLabel>Stakeholder Perspectives</SectionLabel>
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
           {Object.entries(result.persona_reactions ?? {}).map(([key, persona]) => (
             <div key={key} className="border-l-2 border-border-light pl-4">
               <p className="text-sm font-semibold capitalize">{key}</p>
@@ -428,15 +428,15 @@ export default function SimulationResults({
       {/* ── Section G: Risks & Mitigations ────────────────────── */}
       {result.risks?.length > 0 && (
         <>
-          <section className="py-10">
+          <section className="py-8 sm:py-10">
             <SectionLabel>Risks & Mitigations</SectionLabel>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {result.risks.map((r, i) => (
-                <div key={i} className="border border-border-light bg-surface/50 p-4">
-                  <div className="flex items-start justify-between gap-3">
+                <div key={i} className="border border-border-light bg-surface/50 p-3 sm:p-4">
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                     <p className="text-sm font-semibold">{r.risk}</p>
                     <span
-                      className={`shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${LIKELIHOOD_COLORS[r.likelihood] ?? ""}`}
+                      className={`self-start shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${LIKELIHOOD_COLORS[r.likelihood] ?? ""}`}
                     >
                       {r.likelihood}
                     </span>
@@ -458,7 +458,7 @@ export default function SimulationResults({
       {/* ── Section H: Recommendations ────────────────────────── */}
       {result.recommendations?.length > 0 && (
         <>
-          <section className="py-10">
+          <section className="py-8 sm:py-10">
             <SectionLabel>Recommendations</SectionLabel>
             <div className="space-y-3">
               {result.recommendations.map((rec, i) => (
@@ -476,7 +476,7 @@ export default function SimulationResults({
       )}
 
       {/* ── Section I: Policy Assistant Chat ─────────────────── */}
-      <section className="py-10">
+      <section className="py-8 sm:py-10">
         <SectionLabel>Policy Assistant</SectionLabel>
         <PolicyChat
           simulationId={result.simulation_id}
@@ -488,7 +488,7 @@ export default function SimulationResults({
       <hr className="border-border-light" />
 
       {/* ── Section J: Refine Policy ──────────────────────────── */}
-      <section className="py-10">
+      <section className="py-8 sm:py-10">
         <SectionLabel>Refine & Iterate</SectionLabel>
         {!showRefine ? (
           <div className="space-y-3">
@@ -513,7 +513,7 @@ export default function SimulationResults({
               onChange={(e) => setRefinedText(e.target.value)}
               className="w-full border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-light focus:border-accent"
             />
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <button
                 type="button"
                 disabled={
@@ -548,7 +548,7 @@ export default function SimulationResults({
       <hr className="border-border-light" />
 
       {/* ── Section K: Actions ────────────────────────────────── */}
-      <div className="flex items-center gap-6 pt-8 pb-4">
+      <div className="flex flex-col gap-3 pt-6 pb-4 sm:flex-row sm:items-center sm:gap-6 sm:pt-8">
         <button
           type="button"
           onClick={onReset}

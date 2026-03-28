@@ -91,30 +91,30 @@ export default function PolicyChat({
   return (
     <div className="flex flex-col border border-border-light bg-surface">
       {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border-light px-5 py-3">
+      <div className="flex items-center gap-2 border-b border-border-light px-3 py-2.5 sm:px-5 sm:py-3">
         <span className="flex h-2 w-2 rounded-full bg-accent" />
         <span className="text-[13px] font-semibold uppercase tracking-wide text-foreground/70">
           Policy Assistant
         </span>
-        <span className="ml-auto text-xs text-muted-light">
+        <span className="ml-auto hidden text-xs text-muted-light sm:inline">
           Ask anything about this simulation
         </span>
       </div>
 
       {/* Messages */}
-      <div className="flex min-h-[220px] max-h-[420px] flex-col gap-4 overflow-y-auto px-5 py-4">
+      <div className="flex min-h-[180px] max-h-[360px] sm:min-h-[220px] sm:max-h-[420px] flex-col gap-3 sm:gap-4 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4">
         {messages.length === 0 && (
           <div className="space-y-3">
             <p className="text-sm text-muted">
               I&apos;m familiar with this simulation and the historical policy
               knowledge base. What would you like to explore?
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {SUGGESTED_QUESTIONS.map((q) => (
                 <button
                   key={q}
                   onClick={() => sendMessage(q)}
-                  className="rounded-full border border-border px-3 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+                  className="rounded-full border border-border px-2.5 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent sm:px-3"
                 >
                   {q}
                 </button>
@@ -129,7 +129,7 @@ export default function PolicyChat({
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[90%] sm:max-w-[85%] px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-accent text-white"
                   : "border border-border-light bg-background text-foreground"
@@ -183,15 +183,15 @@ export default function PolicyChat({
       </div>
 
       {/* Input */}
-      <div className="border-t border-border-light px-4 py-3">
-        <div className="flex items-end gap-3">
+      <div className="border-t border-border-light px-3 py-2.5 sm:px-4 sm:py-3">
+        <div className="flex items-end gap-2 sm:gap-3">
           <textarea
             ref={inputRef}
             rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask a follow-up question… (Enter to send)"
+            placeholder="Ask a follow-up…"
             disabled={loading}
             className="flex-1 resize-none border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-light focus:border-accent disabled:opacity-50"
             style={{ maxHeight: "120px" }}
@@ -204,12 +204,12 @@ export default function PolicyChat({
           <button
             onClick={() => sendMessage(input)}
             disabled={!input.trim() || loading}
-            className="shrink-0 bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-default disabled:opacity-40"
+            className="shrink-0 bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-default disabled:opacity-40 sm:px-4"
           >
             Send
           </button>
         </div>
-        <p className="mt-1.5 text-[11px] text-muted-light">
+        <p className="mt-1.5 hidden text-[11px] text-muted-light sm:block">
           Shift+Enter for new line
         </p>
       </div>
