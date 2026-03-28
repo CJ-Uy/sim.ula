@@ -14,6 +14,7 @@ import Map, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { FeatureCollection, Point } from "geojson";
 import type { LayerProps } from "react-map-gl/maplibre";
+import type { HeatmapLayerSpecification, CircleLayerSpecification } from "maplibre-gl";
 import {
   fetchHeatGrid,
   fetchAqiGrid,
@@ -431,24 +432,24 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
         {/* Heat index — continuous heatmap */}
         {activeLayers.has("heat") && (
           <Source id="heat-points" type="geojson" data={heatData}>
-            <Layer {...(heatHeatmapStyle as Record<string, unknown>)} />
-            <Layer {...(heatCircleStyle as Record<string, unknown>)} />
+            <Layer {...(heatHeatmapStyle as unknown as LayerProps)} />
+            <Layer {...(heatCircleStyle as unknown as LayerProps)} />
           </Source>
         )}
 
         {/* Air quality — continuous heatmap */}
         {activeLayers.has("aqi") && (
           <Source id="aqi-points" type="geojson" data={aqiData}>
-            <Layer {...(aqiHeatmapStyle as Record<string, unknown>)} />
-            <Layer {...(aqiCircleStyle as Record<string, unknown>)} />
+            <Layer {...(aqiHeatmapStyle as unknown as LayerProps)} />
+            <Layer {...(aqiCircleStyle as unknown as LayerProps)} />
           </Source>
         )}
 
         {/* Flood risk — continuous heatmap */}
         {activeLayers.has("flood") && (
           <Source id="flood-points" type="geojson" data={floodData}>
-            <Layer {...(floodHeatmapStyle as Record<string, unknown>)} />
-            <Layer {...(floodCircleStyle as Record<string, unknown>)} />
+            <Layer {...(floodHeatmapStyle as unknown as LayerProps)} />
+            <Layer {...(floodCircleStyle as unknown as LayerProps)} />
           </Source>
         )}
 
