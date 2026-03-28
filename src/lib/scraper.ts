@@ -4,7 +4,7 @@
 import type { Env, CityConfig, ProximityChain, ScrapeEvent } from './types';
 import { getDb, schema } from '@/db';
 import { eq, sql, and, inArray } from 'drizzle-orm';
-import { searchSearXNG, synthesizeFormFields } from './research';
+import { searchSearXNG } from './research';
 import { extractEntities, resolveEntities, enrichLocationEdges, fixOrphanNodes, crossLinkNewNodes } from './extract';
 import { getEmbedding } from './llm';
 import type { CityContext } from './extract';
@@ -267,13 +267,12 @@ async function scrapeCityTopic(
     return { policiesFound: 0, edgesCreated: 0, crossLinks: 0 };
   }
 
-  // 2. Synthesize into document text
+  // 2. Build document text directly from search snippets (no synthesis LLM call)
   await db.update(schema.scrapeJobs)
     .set({ status: 'extracting' })
     .where(eq(schema.scrapeJobs.id, jobId));
 
-  const synthesized = await synthesizeFormFields(env, searchQuery, results);
-  const docText = buildDocumentText(city, topic, synthesized, results);
+  const docText = buildDocumentText(city, topic, results);
 
   // 3. Run through ingest pipeline
   const docId = `scrape-${city.id}-${topic.replace(/\s+/g, '-').substring(0, 30)}-${Date.now()}`;
@@ -289,11 +288,11 @@ async function scrapeCityTopic(
   // Store document metadata
   await db.insert(schema.documents).values({
     id: docId,
-    title: synthesized.title || `${city.name} - ${topic}`,
+    title: `${city.name} - ${topic}`,
     source_type: 'synthetic',
     source_url: results[0]?.url ?? null,
     r2_key: r2Key,
-    date_published: synthesized.date ?? null,
+    date_published: null,
   }).onConflictDoNothing();
 
   // Extract entities with city context
@@ -468,36 +467,31 @@ async function linkSimilarPoliciesAcrossCities(
 
 /**
  * Build a document text from synthesized search results for ingestion.
- * Includes both the structured synthesis AND raw search snippets so the
- * entity extractor has enough material to identify policies.
+ * Builds document text directly from raw search snippets.
+ * Skips the synthesis LLM call — feeds rich source material straight
+ * to the entity extractor so it can find real policies.
  */
 function buildDocumentText(
   city: CityConfig,
   topic: string,
-  synthesized: Record<string, unknown>,
   sources: Array<{ title: string; content: string; url: string }>,
 ): string {
   const parts = [
     `Policy Research: ${topic} in ${city.name}, ${city.country}`,
+    `Location: ${city.name}, ${city.country}`,
+    `Topic: ${topic}`,
+    '',
+    `The following are search results about policies, programs, ordinances, and regulations`,
+    `related to ${topic} in ${city.name}, ${city.country}.`,
+    `Extract all concrete policies, their effects, and stakeholders.`,
     '',
   ];
 
-  // Structured synthesis (may be sparse if search results were thin)
-  if (synthesized.title) parts.push(`Title: ${synthesized.title}`);
-  if (synthesized.date) parts.push(`Date: ${synthesized.date}`);
-  if (synthesized.policyType) parts.push(`Type: ${synthesized.policyType}`);
-  if (synthesized.whatWasThePolicy) parts.push(`\nPolicy Description:\n${synthesized.whatWasThePolicy}`);
-  if (synthesized.whereImplemented) parts.push(`\nWhere Implemented:\n${synthesized.whereImplemented}`);
-  if (synthesized.whoWasAffected) parts.push(`\nWho Was Affected:\n${synthesized.whoWasAffected}`);
-  if (synthesized.whatHappened) parts.push(`\nOutcomes:\n${synthesized.whatHappened}`);
-  if (synthesized.whoSupportedOpposed) parts.push(`\nSupport/Opposition:\n${synthesized.whoSupportedOpposed}`);
-  if (synthesized.whatWentWrong) parts.push(`\nChallenges:\n${synthesized.whatWentWrong}`);
-
-  // Include raw search snippets so the extractor has more to work with
-  parts.push('\n--- Raw Search Results ---');
-  for (const s of sources.slice(0, 8)) {
-    parts.push(`\n[${s.title}]`);
+  for (const s of sources.slice(0, 10)) {
+    parts.push(`--- ${s.title} ---`);
+    if (s.url) parts.push(`Source: ${s.url}`);
     if (s.content) parts.push(s.content);
+    parts.push('');
   }
 
   return parts.join('\n');
