@@ -121,19 +121,15 @@ function EdgeCard({
   targetName: string;
   onClose: () => void;
 }) {
-  const color = NODE_COLORS[("policy" as GraphNode["type"])] ?? "#94a3b8";
-  const weight = edge.weight ?? 1;
   let meta: Record<string, unknown> = {};
   try { if (edge.metadata) meta = JSON.parse(edge.metadata); } catch { /* ignore */ }
+  // Only show metadata keys other than 'detail' (detail is shown as description)
+  const extraMeta = Object.entries(meta).filter(([k]) => k !== 'detail');
 
   return (
     <aside className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-72 rounded-lg border border-border bg-surface shadow-lg overflow-hidden z-10">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
         <div className="flex items-center gap-2">
-          <span
-            className="inline-block h-2 w-2 rounded-full shrink-0"
-            style={{ backgroundColor: color }}
-          />
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             Relationship
           </span>
@@ -146,7 +142,7 @@ function EdgeCard({
         </button>
       </div>
       <div className="px-4 py-4 space-y-3">
-        <h3 className="font-serif font-semibold text-foreground text-sm">
+        <h3 className="font-serif font-semibold text-foreground text-sm capitalize">
           {edge.relationship.replace(/_/g, " ")}
         </h3>
         <div className="flex items-center gap-1.5 flex-wrap text-xs">
@@ -154,23 +150,12 @@ function EdgeCard({
           <span className="text-muted">→</span>
           <span className="font-medium text-foreground truncate max-w-[90px]">{targetName}</span>
         </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-light mb-1.5">
-            Confidence
-          </p>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-border-light">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${weight * 100}%`, backgroundColor: color }}
-              />
-            </div>
-            <span className="text-xs tabular-nums text-muted">{(weight * 100).toFixed(0)}%</span>
-          </div>
-        </div>
-        {Object.keys(meta).length > 0 && (
+        {typeof meta.detail === 'string' && (
+          <p className="text-xs text-muted leading-relaxed">{meta.detail}</p>
+        )}
+        {extraMeta.length > 0 && (
           <dl className="space-y-1">
-            {Object.entries(meta).map(([k, v]) => (
+            {extraMeta.map(([k, v]) => (
               <div key={k} className="flex gap-2 text-xs">
                 <dt className="shrink-0 w-24 truncate text-muted-light">{k}</dt>
                 <dd className="text-foreground break-words">{String(v)}</dd>
@@ -186,7 +171,7 @@ function EdgeCard({
 function GraphLegend() {
   const entries = Object.entries(NODE_COLORS) as [GraphNode["type"], string][];
   return (
-    <div className="absolute top-3 left-3 sm:bottom-4 sm:left-4 sm:top-auto border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-2 sm:px-3 sm:py-2.5 z-10">
+    <div className="border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-2 sm:px-3 sm:py-2.5">
       <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-light mb-1.5 sm:mb-2">
         Node Types
       </p>
@@ -216,6 +201,10 @@ interface GraphViewProps {
 interface FGNode extends GraphNode {
   x?: number;
   y?: number;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
 }
 interface FGLink extends GraphEdge {
   source: string | FGNode;
@@ -229,7 +218,10 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
   const [truncated, setTruncated] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
   const [showLabels, setShowLabels] = useState(true);
+  const [graphKey, setGraphKey] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const graphRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Fetch graph data
@@ -272,10 +264,12 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
   }, []);
 
   // react-force-graph expects { nodes: [...], links: [...] } with source/target fields
+  // graphKey in deps ensures reset creates fresh objects without stale x/y positions
   const fgData = useMemo(() => ({
     nodes: (graphData?.nodes ?? []).map((n) => ({ ...n })),
     links: (graphData?.edges ?? []).map((e) => ({ ...e, source: e.source_id, target: e.target_id })),
-  }), [graphData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [graphData, graphKey]);
 
   const nodeById = useMemo(() => {
     const m = new Map<string, GraphNode>();
@@ -307,6 +301,7 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     const isSelected = selection?.kind === "node" && selection.data.id === n.id;
     const x = n.x ?? 0;
     const y = n.y ?? 0;
+    if (!isFinite(x) || !isFinite(y)) return;
     const r = isSelected ? 3.5 : 2.5;
 
     // Outer glow
@@ -374,6 +369,10 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     ctx.fill();
   }, []);
 
+  const handleResetGraph = useCallback(() => {
+    setGraphKey((k) => k + 1);
+  }, []);
+
   const linkColorFn = useCallback(() => LINK_COLOR, []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -415,6 +414,8 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
           )}
 
           <ForceGraph2D
+            key={graphKey}
+            ref={graphRef}
             backgroundColor={BG_COLOR}
             width={dimensions.width}
             height={dimensions.height}
@@ -433,15 +434,24 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
             nodeLabel=""
           />
 
-          <GraphLegend />
-
-          {/* Label toggle */}
-          <button
-            onClick={() => setShowLabels((v) => !v)}
-            className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs text-muted hover:text-foreground active:text-foreground transition-colors"
-          >
-            {showLabels ? "Hide Labels" : "Show Labels"}
-          </button>
+          {/* Controls — top-right corner */}
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 flex flex-col items-end gap-2">
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setShowLabels((v) => !v)}
+                className="border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs text-muted hover:text-foreground active:text-foreground transition-colors"
+              >
+                {showLabels ? "Hide Labels" : "Show Labels"}
+              </button>
+              <button
+                onClick={handleResetGraph}
+                className="border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs text-muted hover:text-foreground active:text-foreground transition-colors"
+              >
+                Reset Graph
+              </button>
+            </div>
+            <GraphLegend />
+          </div>
 
           {selection?.kind === "node" && (
             <NodeCard

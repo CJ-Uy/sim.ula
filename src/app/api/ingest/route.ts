@@ -2,7 +2,7 @@
 import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
 import { sql, eq } from 'drizzle-orm';
-import { extractEntities, resolveEntities } from '@/lib/extract';
+import { extractEntities, resolveEntities, enrichLocationEdges } from '@/lib/extract';
 import { getEmbedding } from '@/lib/llm';
 import type { IngestRequest } from '@/lib/types';
 
@@ -138,6 +138,13 @@ export async function POST(request: Request) {
               });
             }
             edgesInserted++;
+          }
+
+          // 6. Auto-enrich location hierarchy edges
+          send({ step: 'enriching', message: 'Linking sub-locations to Quezon City…' });
+          const enriched = await enrichLocationEdges(env, extracted.nodes);
+          if (enriched.length > 0) {
+            console.log(`[enrich] Created ${enriched.length} location hierarchy edge(s)`);
           }
 
           results.push({
