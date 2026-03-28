@@ -1,52 +1,128 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useCallback } from "react";
+import PolicyInput from "@/components/PolicyInput";
+import type { PolicyFormData } from "@/components/PolicyInput";
+import PolicyMap from "@/components/PolicyMap";
+import SimulationLoading from "@/components/SimulationLoading";
+import SimulationResults from "@/components/SimulationResults";
+
+type Screen = "input" | "loading" | "results";
+
+const INITIAL_FORM: PolicyFormData = {
+  policyType: "",
+  category: "",
+  description: "",
+  startDate: "",
+  endDate: "",
+  location: "",
+  agency: "",
+};
+
+function Header({ minimal }: { minimal?: boolean }) {
+  return (
+    <header className="border-b border-border-light bg-surface">
+      <div className="flex items-center justify-between px-6 py-3">
+        <div className="flex items-baseline gap-3">
+          <span className="font-serif text-lg font-semibold tracking-tight">
+            sim.ula
+          </span>
+          {!minimal && (
+            <span className="hidden text-sm text-muted sm:inline">
+              Urban Policy Simulation Platform
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted-light">v0.1</span>
+      </div>
+    </header>
+  );
+}
 
 export default function Home() {
-	return (
-		<div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-			<main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-				<Image className="dark:invert" src="/next.svg" alt="Next.js logo" width={180} height={38} priority />
-				<ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-					<li className="mb-2 tracking-[-.01em]">
-						Get started by editing{" "}
-						<code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-							src/app/page.tsx
-						</code>
-						.
-					</li>
-					<li className="tracking-[-.01em]">Save and see your changes instantly.</li>
-				</ol>
+  const [screen, setScreen] = useState<Screen>("input");
+  const [formData, setFormData] = useState<PolicyFormData>(INITIAL_FORM);
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [selectedLat, setSelectedLat] = useState<number | undefined>();
+  const [selectedLng, setSelectedLng] = useState<number | undefined>();
+  // Target for the map to fly to (set by form geocoding)
+  const [mapTarget, setMapTarget] = useState<{ lng: number; lat: number } | null>(null);
 
-				<div className="flex gap-4 items-center flex-col sm:flex-row">
-					<a
-						className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-						href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						Read our docs
-					</a>
-				</div>
-			</main>
-			<footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-				<a
-					className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-					href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-					target="_blank"
-					rel="noopener noreferrer"
-				>
-					<Image aria-hidden src="/file.svg" alt="File icon" width={16} height={16} />
-					Learn
-				</a>
-				<a
-					className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-					href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-					target="_blank"
-					rel="noopener noreferrer"
-				>
-					<Image aria-hidden src="/globe.svg" alt="Globe icon" width={16} height={16} />
-					Go to nextjs.org →
-				</a>
-			</footer>
-		</div>
-	);
+  const handleLocationSelect = useCallback(
+    (location: string, lat: number, lng: number) => {
+      setSelectedLocation(location);
+      setSelectedLat(lat);
+      setSelectedLng(lng);
+    },
+    []
+  );
+
+  const handleLocationSearch = useCallback(
+    (location: string, lat: number, lng: number) => {
+      setSelectedLocation(location);
+      setSelectedLat(lat);
+      setSelectedLng(lng);
+      setMapTarget({ lng, lat });
+    },
+    []
+  );
+
+  const handleSubmit = (data: PolicyFormData) => {
+    setFormData(data);
+    setScreen("loading");
+  };
+
+  const handleLoadingComplete = useCallback(() => {
+    setScreen("results");
+  }, []);
+
+  const handleReset = () => {
+    setFormData(INITIAL_FORM);
+    setSelectedLocation("");
+    setSelectedLat(undefined);
+    setSelectedLng(undefined);
+    setMapTarget(null);
+    setScreen("input");
+  };
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden">
+      <Header minimal={screen === "loading"} />
+
+      {screen === "input" && (
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div className="h-[40vh] w-full lg:h-full lg:w-[60%]">
+            <PolicyMap
+              onLocationSelect={handleLocationSelect}
+              flyTo={mapTarget}
+            />
+          </div>
+          <div className="min-h-0 w-full flex-1 overflow-y-auto border-l border-border-light bg-background lg:w-[40%] lg:flex-none">
+            <PolicyInput
+              onSubmit={handleSubmit}
+              selectedLocation={selectedLocation}
+              selectedLat={selectedLat}
+              selectedLng={selectedLng}
+              onLocationSearch={handleLocationSearch}
+            />
+          </div>
+        </div>
+      )}
+
+      {screen === "loading" && (
+        <main className="min-h-0 flex-1">
+          <SimulationLoading
+            policy={formData.description}
+            onComplete={handleLoadingComplete}
+          />
+        </main>
+      )}
+
+      {screen === "results" && (
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <SimulationResults formData={formData} onReset={handleReset} />
+        </main>
+      )}
+    </div>
+  );
 }

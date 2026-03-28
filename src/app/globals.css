@@ -1,26 +1,109 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 :root {
-	--background: #ffffff;
-	--foreground: #171717;
+  --background: #FAFAF9;
+  --foreground: #1C1917;
+  --accent: #0F766E;
+  --accent-light: #CCFBF1;
+  --border: #D6D3D1;
+  --border-light: #E7E5E4;
+  --muted: #78716C;
+  --muted-light: #A8A29E;
+  --surface: #FFFFFF;
+  --dim-blue: #1D4ED8;
+  --dim-blue-light: #DBEAFE;
+  --dim-green: #15803D;
+  --dim-green-light: #DCFCE7;
+  --dim-amber: #B45309;
+  --dim-amber-light: #FEF3C7;
 }
 
 @theme inline {
-	--color-background: var(--background);
-	--color-foreground: var(--foreground);
-	--font-sans: var(--font-geist-sans);
-	--font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
+  --color-muted: var(--muted);
+  --color-muted-light: var(--muted-light);
+  --color-surface: var(--surface);
+  --color-dim-blue: var(--dim-blue);
+  --color-dim-blue-light: var(--dim-blue-light);
+  --color-dim-green: var(--dim-green);
+  --color-dim-green-light: var(--dim-green-light);
+  --color-dim-amber: var(--dim-amber);
+  --color-dim-amber-light: var(--dim-amber-light);
+  --font-serif: var(--font-source-serif);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--background: #0a0a0a;
-		--foreground: #ededed;
-	}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 body {
-	background: var(--background);
-	color: var(--foreground);
-	font-family: Arial, Helvetica, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+select,
+input[type="text"],
+input[type="date"],
+textarea {
+  font-size: 15px;
+}
+
+select option {
+  color: var(--foreground);
+}
+
+/* MapLibre overrides for gov portal aesthetic */
+.maplibregl-popup-content {
+  border-radius: 0 !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
+  border: 1px solid var(--border) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.maplibregl-popup-tip {
+  display: none !important;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px !important;
+  background: rgba(250, 250, 249, 0.85) !important;
+}
+
+.maplibregl-ctrl-group {
+  border-radius: 0 !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.maplibregl-ctrl-group button {
+  border-radius: 0 !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
 }
