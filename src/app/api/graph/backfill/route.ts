@@ -2,6 +2,8 @@
 import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
 import { eq, sql } from 'drizzle-orm';
+import { getEmbeddings } from '@/lib/llm';
+import type { Env } from '@/lib/types';
 
 /**
  * Map invalid/non-standard node types to the 6 valid enum values.
@@ -28,8 +30,14 @@ const TYPE_REMAP: Record<string, string> = {
 
 const VALID_TYPES = new Set(['policy', 'location', 'stakeholder', 'outcome', 'event', 'metric']);
 
+// Similarity threshold for cross-linking: lower than the 0.87 merge threshold
+// so we connect related-but-distinct nodes without collapsing them.
+const CROSS_LINK_THRESHOLD = 0.82;
+// Node types eligible for cross-linking (skip policy — too broad, creates noise)
+const CROSSLINK_TYPES = new Set(['stakeholder', 'outcome', 'event', 'metric']);
+
 export async function POST() {
-  const env = await getEnv();
+  const env = await getEnv() as Env;
   const db = getDb(env);
   const encoder = new TextEncoder();
 
@@ -321,8 +329,88 @@ export async function POST() {
           edges_rewritten: edgesRewritten,
         });
 
-        // ── Phase 7: Clean up orphan edges ──────────────────────────
-        send({ step: 'cleaning', message: 'Removing orphan edges…', progress: 92 });
+        // ── Phase 7: Cross-link similar non-policy nodes ────────────
+        // Leaf nodes (outcomes, stakeholders, events, metrics) connected to
+        // different policies may be semantically related. We embed them and
+        // use Vectorize to find close pairs, then add related_to edges so
+        // the graph can be traversed across document boundaries.
+        send({ step: 'crosslinking', message: 'Cross-linking similar nodes across documents…', progress: 92 });
+
+        const crosslinkCandidates = allNodes.filter(
+          (n) => CROSSLINK_TYPES.has(n.type) && n.id !== 'quezon-city'
+        );
+
+        // Build texts to embed in batch
+        const texts = crosslinkCandidates.map((n) => `${n.type}: ${n.name}`);
+        let crossLinksCreated = 0;
+
+        if (crosslinkCandidates.length > 0) {
+          // Embed in batches of 20 to avoid timeout
+          const BATCH = 20;
+          const embeddings: number[][] = [];
+          for (let i = 0; i < texts.length; i += BATCH) {
+            const batch = await getEmbeddings(env, texts.slice(i, i + BATCH));
+            embeddings.push(...batch);
+          }
+
+          // Build a set of existing edges to avoid duplicates
+          const existingPairs = new Set<string>();
+          for (const edge of allEdges) {
+            existingPairs.add(`${edge.source_id}|${edge.target_id}`);
+            existingPairs.add(`${edge.target_id}|${edge.source_id}`);
+          }
+
+          for (let i = 0; i < crosslinkCandidates.length; i++) {
+            const node = crosslinkCandidates[i];
+            const embedding = embeddings[i];
+            if (!embedding) continue;
+
+            // Query Vectorize for similar nodes
+            const results = await env.VECTOR_INDEX.query(embedding, {
+              topK: 5,
+              returnMetadata: 'all',
+            });
+
+            for (const match of results.matches) {
+              if (match.score < CROSS_LINK_THRESHOLD) continue;
+              if (match.id === node.id) continue;
+              // Only link same-type nodes to keep edges semantically clean
+              const matchType = (match.metadata as Record<string, string> | null)?.type;
+              if (matchType !== node.type) continue;
+              // Skip if pair already connected in either direction
+              if (existingPairs.has(`${node.id}|${match.id}`)) continue;
+
+              const matchName = nodeNameById.get(match.id) ?? match.id;
+              await db.insert(schema.edges).values({
+                source_id: node.id,
+                target_id: match.id,
+                relationship: 'related_to',
+                weight: match.score,
+                metadata: JSON.stringify({
+                  detail: `${node.name} and ${matchName} are semantically related (similarity ${match.score.toFixed(2)})`,
+                  similarity: match.score,
+                  cross_link: true,
+                }),
+              });
+              // Track both directions so we don't add reverse edge
+              existingPairs.add(`${node.id}|${match.id}`);
+              existingPairs.add(`${match.id}|${node.id}`);
+              crossLinksCreated++;
+              edgesCreated++;
+            }
+          }
+        }
+
+        send({
+          step: 'crosslinking',
+          message: `Created ${crossLinksCreated} cross-document links`,
+          progress: 95,
+          edges_created: edgesCreated,
+          cross_links: crossLinksCreated,
+        });
+
+        // ── Phase 8: Clean up orphan edges ──────────────────────────
+        send({ step: 'cleaning', message: 'Removing orphan edges…', progress: 97 });
 
         const orphanEdgeResult = await db.run(sql`
           DELETE FROM edges
@@ -333,7 +421,7 @@ export async function POST() {
 
         send({
           step: 'done',
-          message: `Backfill complete: ${typesFixed} types fixed, ${edgesCreated} edges created, ${orphansFixed} orphans reconnected, ${orphanEdgesRemoved} dead edges removed`,
+          message: `Backfill complete: ${typesFixed} types fixed, ${edgesCreated} edges created (${crossLinksCreated} cross-links), ${orphanEdgesRemoved} dead edges removed`,
           progress: 100,
           types_fixed: typesFixed,
           edges_created: edgesCreated,

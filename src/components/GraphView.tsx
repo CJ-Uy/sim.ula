@@ -121,19 +121,15 @@ function EdgeCard({
   targetName: string;
   onClose: () => void;
 }) {
-  const color = NODE_COLORS[("policy" as GraphNode["type"])] ?? "#94a3b8";
-  const weight = edge.weight ?? 1;
   let meta: Record<string, unknown> = {};
   try { if (edge.metadata) meta = JSON.parse(edge.metadata); } catch { /* ignore */ }
+  // Only show metadata keys other than 'detail' (detail is shown as description)
+  const extraMeta = Object.entries(meta).filter(([k]) => k !== 'detail');
 
   return (
     <aside className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-72 rounded-lg border border-border bg-surface shadow-lg overflow-hidden z-10">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
         <div className="flex items-center gap-2">
-          <span
-            className="inline-block h-2 w-2 rounded-full shrink-0"
-            style={{ backgroundColor: color }}
-          />
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             Relationship
           </span>
@@ -146,7 +142,7 @@ function EdgeCard({
         </button>
       </div>
       <div className="px-4 py-4 space-y-3">
-        <h3 className="font-serif font-semibold text-foreground text-sm">
+        <h3 className="font-serif font-semibold text-foreground text-sm capitalize">
           {edge.relationship.replace(/_/g, " ")}
         </h3>
         <div className="flex items-center gap-1.5 flex-wrap text-xs">
@@ -154,23 +150,12 @@ function EdgeCard({
           <span className="text-muted">→</span>
           <span className="font-medium text-foreground truncate max-w-[90px]">{targetName}</span>
         </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-light mb-1.5">
-            Confidence
-          </p>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-border-light">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${weight * 100}%`, backgroundColor: color }}
-              />
-            </div>
-            <span className="text-xs tabular-nums text-muted">{(weight * 100).toFixed(0)}%</span>
-          </div>
-        </div>
-        {Object.keys(meta).length > 0 && (
+        {typeof meta.detail === 'string' && (
+          <p className="text-xs text-muted leading-relaxed">{meta.detail}</p>
+        )}
+        {extraMeta.length > 0 && (
           <dl className="space-y-1">
-            {Object.entries(meta).map(([k, v]) => (
+            {extraMeta.map(([k, v]) => (
               <div key={k} className="flex gap-2 text-xs">
                 <dt className="shrink-0 w-24 truncate text-muted-light">{k}</dt>
                 <dd className="text-foreground break-words">{String(v)}</dd>
