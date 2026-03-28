@@ -1,6 +1,7 @@
 // app/api/ingest/route.ts
 import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
+import { sql, eq } from 'drizzle-orm';
 import { extractEntities } from '@/lib/extract';
 import { getEmbedding } from '@/lib/llm';
 import type { IngestRequest } from '@/lib/types';
@@ -87,15 +88,33 @@ export async function POST(request: Request) {
         nodesInserted++;
       }
 
-      // 5. Insert edges
+      // 5. Insert edges (skip duplicates: same source, target, and relationship)
       let edgesInserted = 0;
       for (const edge of extracted.edges) {
-        await db.insert(schema.edges).values({
-          source_id: edge.source_id,
-          target_id: edge.target_id,
-          relationship: edge.relationship as typeof schema.edges.$inferInsert['relationship'],
-          metadata: JSON.stringify(edge.metadata ?? {}),
-        });
+        const existing = await db
+          .select({ id: schema.edges.id })
+          .from(schema.edges)
+          .where(
+            sql`${schema.edges.source_id} = ${edge.source_id}
+              AND ${schema.edges.target_id} = ${edge.target_id}
+              AND ${schema.edges.relationship} = ${edge.relationship}`
+          )
+          .get();
+
+        if (existing) {
+          // Update metadata on the existing edge rather than creating a duplicate
+          await db
+            .update(schema.edges)
+            .set({ metadata: JSON.stringify(edge.metadata ?? {}) })
+            .where(eq(schema.edges.id, existing.id));
+        } else {
+          await db.insert(schema.edges).values({
+            source_id: edge.source_id,
+            target_id: edge.target_id,
+            relationship: edge.relationship as typeof schema.edges.$inferInsert['relationship'],
+            metadata: JSON.stringify(edge.metadata ?? {}),
+          });
+        }
         edgesInserted++;
       }
 
