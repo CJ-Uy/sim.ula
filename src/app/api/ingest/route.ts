@@ -4,7 +4,11 @@ import { getDb, schema } from '@/db';
 import { sql, eq } from 'drizzle-orm';
 import { extractEntities, resolveEntities, enrichLocationEdges, fixOrphanNodes, crossLinkNewNodes } from '@/lib/extract';
 import { getEmbedding } from '@/lib/llm';
+import { CITY_REGISTRY } from '@/lib/scraper';
 import type { IngestRequest } from '@/lib/types';
+
+// Seeded city node IDs that must never be overwritten by extraction
+const SEEDED_CITY_IDS = new Set(['quezon-city', 'manila', ...CITY_REGISTRY.map((c) => c.id)]);
 
 export async function POST(request: Request) {
   const env = await getEnv();
@@ -78,24 +82,39 @@ export async function POST(request: Request) {
           for (const node of extracted.nodes) {
             send({ step: 'embedding', message: `Embedding node ${nodesInserted + 1} of ${totalNodes}…` });
 
-            await db
-              .insert(schema.nodes)
-              .values({
-                id: node.id,
-                type: node.type as typeof schema.nodes.$inferInsert['type'],
-                name: node.name,
-                description: node.description ?? null,
-                metadata: JSON.stringify(node.metadata ?? {}),
-                source_doc_id: docId,
-              })
-              .onConflictDoUpdate({
-                target: schema.nodes.id,
-                set: {
+            // Never overwrite seeded city nodes — their metadata is canonical
+            if (SEEDED_CITY_IDS.has(node.id)) {
+              await db
+                .insert(schema.nodes)
+                .values({
+                  id: node.id,
+                  type: node.type as typeof schema.nodes.$inferInsert['type'],
                   name: node.name,
                   description: node.description ?? null,
                   metadata: JSON.stringify(node.metadata ?? {}),
-                },
-              });
+                  source_doc_id: docId,
+                })
+                .onConflictDoNothing();
+            } else {
+              await db
+                .insert(schema.nodes)
+                .values({
+                  id: node.id,
+                  type: node.type as typeof schema.nodes.$inferInsert['type'],
+                  name: node.name,
+                  description: node.description ?? null,
+                  metadata: JSON.stringify(node.metadata ?? {}),
+                  source_doc_id: docId,
+                })
+                .onConflictDoUpdate({
+                  target: schema.nodes.id,
+                  set: {
+                    name: node.name,
+                    description: node.description ?? null,
+                    metadata: JSON.stringify(node.metadata ?? {}),
+                  },
+                });
+            }
 
             // Reuse the embedding computed during resolution — avoids a second LLM call
             const textToEmbed = `${node.type}: ${node.name}. ${node.description ?? ''}`;

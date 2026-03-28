@@ -266,7 +266,13 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
   // react-force-graph expects { nodes: [...], links: [...] } with source/target fields
   // graphKey in deps ensures reset creates fresh objects without stale x/y positions
   const fgData = useMemo(() => ({
-    nodes: (graphData?.nodes ?? []).map((n) => ({ ...n })),
+    nodes: (graphData?.nodes ?? []).map((n) => {
+      if (n.id === 'quezon-city') {
+        // Pin Quezon City at the center of the graph
+        return { ...n, fx: 0, fy: 0 };
+      }
+      return { ...n };
+    }),
     links: (graphData?.edges ?? []).map((e) => ({ ...e, source: e.source_id, target: e.target_id })),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [graphData, graphKey]);
@@ -299,10 +305,11 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     const color = NODE_COLORS[n.type] ?? "#78716c";
     const glow = NODE_GLOW[n.type] ?? "rgba(120,113,108,0.15)";
     const isSelected = selection?.kind === "node" && selection.data.id === n.id;
+    const isQC = n.id === 'quezon-city';
     const x = n.x ?? 0;
     const y = n.y ?? 0;
     if (!isFinite(x) || !isFinite(y)) return;
-    const r = isSelected ? 3.5 : 2.5;
+    const r = isQC ? 6 : isSelected ? 3.5 : 2.5;
 
     // Outer glow
     ctx.save();
@@ -321,8 +328,23 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     ctx.fillStyle = color;
     ctx.fill();
 
+    // Quezon City highlight ring — always visible as the central hub
+    if (isQC) {
+      ctx.beginPath();
+      ctx.arc(x, y, r + 3, 0, 2 * Math.PI);
+      ctx.strokeStyle = "#dc2626";
+      ctx.lineWidth = 2 / globalScale;
+      ctx.stroke();
+      // Second outer ring
+      ctx.beginPath();
+      ctx.arc(x, y, r + 6, 0, 2 * Math.PI);
+      ctx.strokeStyle = "rgba(220,38,38,0.3)";
+      ctx.lineWidth = 1 / globalScale;
+      ctx.stroke();
+    }
+
     // Selection ring
-    if (isSelected) {
+    if (isSelected && !isQC) {
       ctx.beginPath();
       ctx.arc(x, y, r + 2, 0, 2 * Math.PI);
       ctx.strokeStyle = "#1c1917";
@@ -330,8 +352,8 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
       ctx.stroke();
     }
 
-    // Label
-    if (showLabels) {
+    // Label — always show for QC
+    if (showLabels || isQC) {
       const fontSize = Math.min(Math.max(11 / globalScale, 2.5), 5);
       const label = n.name.length > 20 && globalScale < 2
         ? n.name.slice(0, 18) + "…"

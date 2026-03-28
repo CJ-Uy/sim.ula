@@ -62,7 +62,7 @@ export async function searchSearXNG(env: Env, query: string): Promise<SearchResu
   };
 
   return (data.results ?? [])
-    .slice(0, 8)
+    .slice(0, 15)
     .map((r) => ({
       title: r.title ?? '',
       url: r.url ?? '',

@@ -134,7 +134,11 @@ export async function seedCityGraph(env: Env): Promise<{ nodesCreated: number; e
   let nodesCreated = 0;
   let edgesCreated = 0;
 
-  // Ensure quezon-city exists first
+  // Force-fix all city nodes via direct UPDATE (handles corruption from extraction)
+  // Then INSERT OR IGNORE to create any missing ones.
+
+  // Fix QC
+  await db.run(sql`UPDATE nodes SET name = 'Quezon City', description = 'Quezon City, the largest city in Metro Manila, Philippines.', metadata = ${JSON.stringify({ level: 'city', region: 'NCR', country: 'Philippines', ring: 0, lat: 14.676, lng: 121.0437 })} WHERE id = 'quezon-city'`);
   await db.insert(schema.nodes).values({
     id: 'quezon-city',
     type: 'location',
@@ -144,7 +148,8 @@ export async function seedCityGraph(env: Env): Promise<{ nodesCreated: number; e
     source_doc_id: null,
   }).onConflictDoNothing();
 
-  // Ensure manila exists (hub node for chains)
+  // Fix Manila
+  await db.run(sql`UPDATE nodes SET name = 'Manila', description = 'Manila, the capital of the Philippines.', metadata = ${JSON.stringify({ level: 'city', region: 'NCR', country: 'Philippines', ring: 1, lat: 14.5995, lng: 120.9842 })} WHERE id = 'manila'`);
   await db.insert(schema.nodes).values({
     id: 'manila',
     type: 'location',
@@ -154,21 +159,28 @@ export async function seedCityGraph(env: Env): Promise<{ nodesCreated: number; e
     source_doc_id: null,
   }).onConflictDoNothing();
 
-  // Create all city nodes
+  // Fix all registry city nodes
   for (const city of CITY_REGISTRY) {
+    const cityMeta = JSON.stringify({
+      level: 'city',
+      country: city.country,
+      region: city.region,
+      ring: city.ring,
+      lat: city.lat,
+      lng: city.lng,
+    });
+    const cityDesc = `${city.name}, ${city.country} — policy data for cross-city analysis.`;
+
+    // Force UPDATE first to fix any corruption
+    await db.run(sql`UPDATE nodes SET name = ${city.name}, description = ${cityDesc}, metadata = ${cityMeta} WHERE id = ${city.id}`);
+
+    // Then INSERT if it doesn't exist yet
     const result = await db.insert(schema.nodes).values({
       id: city.id,
       type: 'location',
       name: city.name,
-      description: `${city.name}, ${city.country} — policy data for cross-city analysis.`,
-      metadata: JSON.stringify({
-        level: 'city',
-        country: city.country,
-        region: city.region,
-        ring: city.ring,
-        lat: city.lat,
-        lng: city.lng,
-      }),
+      description: cityDesc,
+      metadata: cityMeta,
       source_doc_id: null,
     }).onConflictDoNothing();
     if (result.meta?.changes ?? 0 > 0) nodesCreated++;
@@ -213,6 +225,85 @@ export async function seedCityGraph(env: Env): Promise<{ nodesCreated: number; e
   }
 
   return { nodesCreated, edgesCreated };
+}
+
+// ── Full Page Fetching ─────────────────────────────────────────────────────
+
+/**
+ * Fetch a web page and extract its text content.
+ * Strips HTML tags, scripts, styles, nav, and returns clean text.
+ * Returns empty string on failure (timeout, blocked, etc).
+ */
+async function fetchPageText(url: string, timeoutMs = 15000): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) return '';
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) return '';
+
+    const html = await res.text();
+
+    // Strip scripts, styles, nav, header, footer, and HTML tags
+    let text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+      .replace(/<header[\s\S]*?<\/header>/gi, ' ')
+      .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+      .replace(/<aside[\s\S]*?<\/aside>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')               // strip remaining tags
+      .replace(/&[a-z]+;/gi, ' ')              // strip HTML entities
+      .replace(/\s+/g, ' ')                    // collapse whitespace
+      .trim();
+
+    // Cap at ~8000 chars per page to stay within context budget
+    if (text.length > 8000) text = text.substring(0, 8000);
+
+    return text;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Enrich search results by fetching full page content for the top URLs.
+ * Fetches pages in parallel (up to 5 at a time) and replaces the snippet
+ * with full page text when available.
+ */
+async function enrichWithFullPages(
+  results: Array<{ title: string; url: string; content: string; engine: string }>,
+  maxPages = 5,
+): Promise<Array<{ title: string; url: string; content: string; engine: string }>> {
+  const toFetch = results.slice(0, maxPages);
+  const rest = results.slice(maxPages);
+
+  const pageTexts = await Promise.all(
+    toFetch.map((r) => fetchPageText(r.url))
+  );
+
+  const enriched = toFetch.map((r, i) => {
+    const pageText = pageTexts[i];
+    // Use full page text if we got meaningful content (>200 chars), otherwise keep snippet
+    if (pageText.length > 200) {
+      return { ...r, content: pageText };
+    }
+    return r;
+  });
+
+  return [...enriched, ...rest];
 }
 
 // ── Scrape Orchestration ────────────────────────────────────────────────────
@@ -267,12 +358,13 @@ async function scrapeCityTopic(
     return { policiesFound: 0, edgesCreated: 0, crossLinks: 0 };
   }
 
-  // 2. Build document text directly from search snippets (no synthesis LLM call)
+  // 2. Fetch full page content from top URLs, then build document text
   await db.update(schema.scrapeJobs)
     .set({ status: 'extracting' })
     .where(eq(schema.scrapeJobs.id, jobId));
 
-  const docText = buildDocumentText(city, topic, results);
+  const enrichedResults = await enrichWithFullPages(results, 5);
+  const docText = buildDocumentText(city, topic, enrichedResults);
 
   // 3. Run through ingest pipeline
   const docId = `scrape-${city.id}-${topic.replace(/\s+/g, '-').substring(0, 30)}-${Date.now()}`;
@@ -317,24 +409,41 @@ async function scrapeCityTopic(
   extracted.nodes = resolvedNodes;
   extracted.edges = resolvedEdges;
 
+  // Collect seeded city node IDs so we never overwrite them
+  const seededCityIds = new Set(CITY_REGISTRY.map((c) => c.id));
+  seededCityIds.add('quezon-city');
+  seededCityIds.add('manila');
+
   // Insert nodes + embeddings
   let nodesInserted = 0;
   for (const node of extracted.nodes) {
-    await db.insert(schema.nodes).values({
-      id: node.id,
-      type: node.type as typeof schema.nodes.$inferInsert['type'],
-      name: node.name,
-      description: node.description ?? null,
-      metadata: JSON.stringify(node.metadata ?? {}),
-      source_doc_id: docId,
-    }).onConflictDoUpdate({
-      target: schema.nodes.id,
-      set: {
+    // Never overwrite seeded city nodes — their name/description/metadata are canonical
+    if (seededCityIds.has(node.id)) {
+      await db.insert(schema.nodes).values({
+        id: node.id,
+        type: node.type as typeof schema.nodes.$inferInsert['type'],
         name: node.name,
         description: node.description ?? null,
         metadata: JSON.stringify(node.metadata ?? {}),
-      },
-    });
+        source_doc_id: docId,
+      }).onConflictDoNothing();
+    } else {
+      await db.insert(schema.nodes).values({
+        id: node.id,
+        type: node.type as typeof schema.nodes.$inferInsert['type'],
+        name: node.name,
+        description: node.description ?? null,
+        metadata: JSON.stringify(node.metadata ?? {}),
+        source_doc_id: docId,
+      }).onConflictDoUpdate({
+        target: schema.nodes.id,
+        set: {
+          name: node.name,
+          description: node.description ?? null,
+          metadata: JSON.stringify(node.metadata ?? {}),
+        },
+      });
+    }
 
     const textToEmbed = `${node.type}: ${node.name}. ${node.description ?? ''}`;
     const embedding = embeddingCache.get(node.id) ?? await getEmbedding(env, textToEmbed);
