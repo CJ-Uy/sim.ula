@@ -8,7 +8,7 @@ import type { IngestRequest } from '@/lib/types';
 export const runtime = 'edge';
 
 export async function POST(request: Request) {
-  const env = getEnv();
+  const env = await getEnv();
   const body = (await request.json()) as IngestRequest;
 
   if (!body.documents?.length) {

@@ -24,150 +24,44 @@ export interface FloodPoint {
   riverDischarge: number;
 }
 
-// --- Grid generation ---
+// --- Grid fetch (one request per layer via /api/weather/grid) ---
+// Grid generation and caching now happen server-side; the browser makes a
+// single request per layer type instead of one request per grid point.
 
-const MAX_POINTS = 300;
+const EMPTY_FC: FeatureCollection<Point> = { type: "FeatureCollection", features: [] };
 
-function generateGrid(
+async function fetchGrid(
   bounds: { north: number; south: number; east: number; west: number },
-  step: number
-): Array<{ lat: number; lng: number }> {
-  const latRange = bounds.north - bounds.south;
-  const lngRange = bounds.east - bounds.west;
-  const estCount = (latRange / step) * (lngRange / step);
-  const effectiveStep = estCount > MAX_POINTS
-    ? step * Math.sqrt(estCount / MAX_POINTS)
-    : step;
-
-  const points: Array<{ lat: number; lng: number }> = [];
-  for (let lat = bounds.south; lat <= bounds.north; lat += effectiveStep) {
-    for (let lng = bounds.west; lng <= bounds.east; lng += effectiveStep) {
-      points.push({ lat: parseFloat(lat.toFixed(4)), lng: parseFloat(lng.toFixed(4)) });
-    }
-  }
-  return points;
-}
-
-// --- Internal weather API (routes through /api/weather for caching) ---
-// Each grid point is fetched via our own edge worker, which caches results
-// in KV + D1. First load per coordinate calls Open-Meteo; every subsequent
-// viewer (same coordinates) gets a KV hit in ~1ms instead.
-
-async function fetchWeatherPoint(
-  lat: number,
-  lng: number,
   type: "heat" | "aqi" | "flood"
-): Promise<unknown> {
+): Promise<FeatureCollection<Point>> {
+  const { north, south, east, west } = bounds;
   try {
-    const res = await fetch(`/api/weather?lat=${lat}&lng=${lng}&type=${type}`);
-    if (!res.ok) return null;
+    const res = await fetch(
+      `/api/weather/grid?north=${north}&south=${south}&east=${east}&west=${west}&type=${type}`
+    );
+    if (!res.ok) return EMPTY_FC;
     return res.json();
   } catch {
-    return null;
+    return EMPTY_FC;
   }
 }
 
-// --- Fetch heat index grid ---
-
-export async function fetchHeatGrid(
+export function fetchHeatGrid(
   bounds: { north: number; south: number; east: number; west: number }
 ): Promise<FeatureCollection<Point>> {
-  const points = generateGrid(bounds, 0.01);
-  if (points.length === 0) return { type: "FeatureCollection", features: [] };
-
-  const results = await Promise.all(
-    points.map((p) => fetchWeatherPoint(p.lat, p.lng, "heat"))
-  );
-
-  return {
-    type: "FeatureCollection",
-    features: results
-      .map((r, i) => {
-        const data = r as {
-          current?: {
-            temperature_2m?: number;
-            apparent_temperature?: number;
-            relative_humidity_2m?: number;
-          };
-        } | null;
-        if (!data?.current) return null;
-        return {
-          type: "Feature" as const,
-          geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
-          properties: {
-            apparentTemperature: data.current.apparent_temperature ?? 0,
-            temperature: data.current.temperature_2m ?? 0,
-            humidity: data.current.relative_humidity_2m ?? 0,
-          },
-        };
-      })
-      .filter((f): f is NonNullable<typeof f> => f !== null),
-  };
+  return fetchGrid(bounds, "heat");
 }
 
-// --- Fetch air quality grid ---
-
-export async function fetchAqiGrid(
+export function fetchAqiGrid(
   bounds: { north: number; south: number; east: number; west: number }
 ): Promise<FeatureCollection<Point>> {
-  const points = generateGrid(bounds, 0.015);
-  if (points.length === 0) return { type: "FeatureCollection", features: [] };
-
-  const results = await Promise.all(
-    points.map((p) => fetchWeatherPoint(p.lat, p.lng, "aqi"))
-  );
-
-  return {
-    type: "FeatureCollection",
-    features: results
-      .map((r, i) => {
-        const data = r as {
-          current?: { us_aqi?: number; pm2_5?: number; pm10?: number };
-        } | null;
-        if (!data?.current || data.current.us_aqi == null) return null;
-        return {
-          type: "Feature" as const,
-          geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
-          properties: {
-            usAqi: data.current.us_aqi,
-            pm25: data.current.pm2_5 ?? 0,
-            pm10: data.current.pm10 ?? 0,
-          },
-        };
-      })
-      .filter((f): f is NonNullable<typeof f> => f !== null),
-  };
+  return fetchGrid(bounds, "aqi");
 }
 
-// --- Fetch flood / river discharge grid ---
-
-export async function fetchFloodGrid(
+export function fetchFloodGrid(
   bounds: { north: number; south: number; east: number; west: number }
 ): Promise<FeatureCollection<Point>> {
-  const points = generateGrid(bounds, 0.02);
-  if (points.length === 0) return { type: "FeatureCollection", features: [] };
-
-  const results = await Promise.all(
-    points.map((p) => fetchWeatherPoint(p.lat, p.lng, "flood"))
-  );
-
-  return {
-    type: "FeatureCollection",
-    features: results
-      .map((r, i) => {
-        const data = r as {
-          daily?: { river_discharge_mean?: (number | null)[] };
-        } | null;
-        const discharge = data?.daily?.river_discharge_mean?.[0];
-        if (!discharge || discharge <= 0) return null;
-        return {
-          type: "Feature" as const,
-          geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
-          properties: { riverDischarge: discharge },
-        };
-      })
-      .filter((f): f is NonNullable<typeof f> => f !== null),
-  };
+  return fetchGrid(bounds, "flood");
 }
 
 // --- Color helpers ---

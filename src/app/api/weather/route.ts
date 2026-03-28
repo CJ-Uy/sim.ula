@@ -2,8 +2,6 @@
 import { getEnv } from '@/lib/env';
 import { getCachedWeather } from '@/lib/weather';
 
-export const runtime = 'edge';
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const lat = parseFloat(searchParams.get('lat') ?? '');
@@ -18,7 +16,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const env = getEnv();
+    const env = await getEnv();
     const data = await getCachedWeather(env, lat, lng, type!);
 
     // X-Cache header lets the client know if this was a KV hit or a fresh fetch

@@ -6,7 +6,7 @@ import type { SearchResult, IngestFormRecord } from '@/lib/types';
 export const runtime = 'edge';
 
 export async function POST(request: Request) {
-  const env = getEnv();
+  const env = await getEnv();
   const body = (await request.json()) as {
     query?: string;
     sources?: SearchResult[];

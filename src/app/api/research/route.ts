@@ -5,7 +5,7 @@ import { runResearch } from '@/lib/research';
 export const runtime = 'edge';
 
 export async function POST(request: Request) {
-  const env = getEnv();
+  const env = await getEnv();
 
   if (!env.SEARXNG_URL) {
     return Response.json(

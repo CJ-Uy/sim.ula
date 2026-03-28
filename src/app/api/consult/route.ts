@@ -31,7 +31,7 @@ Return ONLY valid JSON (no markdown, no explanation):
 Be specific to Quezon City. Reference actual governance structures (barangay system, city council). Suggest policies that are realistically implementable at the local government level.`;
 
 export async function POST(request: Request) {
-  const env = getEnv();
+  const env = await getEnv();
   const body = (await request.json()) as ConsultRequest;
 
   if (!body.goal) {

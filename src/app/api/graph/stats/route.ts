@@ -6,7 +6,7 @@ import { sql, count } from 'drizzle-orm';
 export const runtime = 'edge';
 
 export async function GET() {
-  const env = getEnv();
+  const env = await getEnv();
   const db = getDb(env);
 
   const [nodeCount, edgeCount, docCount, simCount, nodesByType, edgesByType] =

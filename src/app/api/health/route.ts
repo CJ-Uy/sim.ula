@@ -4,7 +4,7 @@ import { getEnv } from '@/lib/env';
 export const runtime = 'edge';
 
 export async function GET() {
-  const env = getEnv();
+  const env = await getEnv();
   const checks: Record<string, string> = {};
 
   await Promise.all([

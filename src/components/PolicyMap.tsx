@@ -342,11 +342,9 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
 
       onLocationSelect(locationName, lat, lng);
 
-      // Fetch live weather for popup
+      // Fetch live weather for popup (routes through /api/weather for D1/KV caching)
       try {
-        const weatherRes = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,relative_humidity_2m`
-        );
+        const weatherRes = await fetch(`/api/weather?lat=${lat}&lng=${lng}&type=heat`);
         const weather = (await weatherRes.json()) as {
           current: {
             temperature_2m: number;
