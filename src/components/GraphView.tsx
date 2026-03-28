@@ -1,14 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import dynamic from "next/dynamic";
+import ForceGraph2D from "react-force-graph-2d";
 import type { GraphNode, GraphEdge, GraphAPIResponse } from "@/lib/types";
-
-// Dynamic import — react-force-graph-2d touches window/document, must be client-only
-const ForceGraph2D = dynamic(
-  () => import("react-force-graph-2d"),
-  { ssr: false, loading: () => <GraphLoadingSpinner /> }
-);
 
 // ── Color palettes ────────────────────────────────────────────────────────────
 
@@ -36,14 +30,6 @@ const RELATIONSHIP_COLORS: Record<string, string> = {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function GraphLoadingSpinner() {
-  return (
-    <div className="flex h-full w-full items-center justify-center gap-3 text-sm text-muted">
-      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-      Loading graph…
-    </div>
-  );
-}
 
 interface DocRow {
   id: string;

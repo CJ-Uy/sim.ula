@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { BASE_POLICY_TYPES, getCustomTypes, saveCustomTypes } from "@/lib/policyTypes";
-import GraphView from "./GraphView";
+
+// ssr: false ensures react-force-graph-2d (canvas/WebGL) never enters the Worker bundle
+const GraphView = dynamic(() => import("./GraphView"), { ssr: false });
 
 interface DocRow {
   id: string;
