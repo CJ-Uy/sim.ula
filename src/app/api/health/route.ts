@@ -1,8 +1,6 @@
 // app/api/health/route.ts
 import { getEnv } from '@/lib/env';
 
-export const runtime = 'edge';
-
 export async function GET() {
   const env = await getEnv();
   const checks: Record<string, string> = {};

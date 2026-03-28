@@ -3,8 +3,6 @@ import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
 import { eq } from 'drizzle-orm';
 
-export const runtime = 'edge';
-
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }

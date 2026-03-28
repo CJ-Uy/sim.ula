@@ -3,8 +3,6 @@ import { getEnv } from '@/lib/env';
 import { synthesizeSingleField, verifyWithDeBERTa } from '@/lib/research';
 import type { SearchResult, IngestFormRecord } from '@/lib/types';
 
-export const runtime = 'edge';
-
 export async function POST(request: Request) {
   const env = await getEnv();
   const body = (await request.json()) as {

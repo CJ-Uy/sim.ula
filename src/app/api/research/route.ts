@@ -2,8 +2,6 @@
 import { getEnv } from '@/lib/env';
 import { runResearch } from '@/lib/research';
 
-export const runtime = 'edge';
-
 export async function POST(request: Request) {
   const env = await getEnv();
 

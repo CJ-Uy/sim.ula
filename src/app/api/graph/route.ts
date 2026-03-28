@@ -3,8 +3,6 @@ import { getDb, schema } from '@/db';
 import { eq, inArray } from 'drizzle-orm';
 import type { Edge } from '@/db/schema';
 
-export const runtime = 'edge';
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const docId = searchParams.get('doc_id') ?? undefined;

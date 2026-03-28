@@ -3,8 +3,6 @@ import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
 import { sql } from 'drizzle-orm';
 
-export const runtime = 'edge';
-
 export async function GET() {
   const env = await getEnv();
   const db = getDb(env);

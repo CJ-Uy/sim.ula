@@ -5,8 +5,6 @@ import { extractEntities, resolveEntities } from '@/lib/extract';
 import { getEmbedding } from '@/lib/llm';
 import type { IngestRequest } from '@/lib/types';
 
-export const runtime = 'edge';
-
 export async function POST(request: Request) {
   const env = await getEnv();
   const body = (await request.json()) as IngestRequest;
