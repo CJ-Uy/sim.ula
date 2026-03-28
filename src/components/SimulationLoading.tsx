@@ -1,48 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import type { PolicyFormData } from "./PolicyInput";
+import type { SimulationResult } from "@/lib/types";
 
 const STEPS = [
-  "Retrieving relevant policy cases",
-  "Analyzing economic impact",
-  "Simulating environmental outcomes",
-  "Evaluating social effects",
+  "Querying knowledge graph for precedents",
+  "Fetching environmental context",
+  "Running policy simulation",
+  "Analyzing impacts & stakeholder reactions",
   "Computing sustainability score",
 ];
 
 interface SimulationLoadingProps {
-  policy: string;
-  onComplete: () => void;
+  formData: PolicyFormData;
+  onComplete: (result: SimulationResult & { simulation_id: string }) => void;
+  onError: () => void;
 }
 
 export default function SimulationLoading({
-  policy,
+  formData,
   onComplete,
+  onError,
 }: SimulationLoadingProps) {
   const [activeStep, setActiveStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const calledRef = useRef(false);
 
   const displayPolicy =
-    policy.length > 120 ? policy.slice(0, 120) + "\u2026" : policy;
+    formData.description.length > 120
+      ? formData.description.slice(0, 120) + "\u2026"
+      : formData.description;
 
+  // Animate steps forward as time passes
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
-
-    for (let i = 1; i <= STEPS.length; i++) {
-      timers.push(
-        setTimeout(() => {
-          setActiveStep(i);
-        }, i * 1200)
-      );
+    // Advance steps on a schedule, but the last step stays until the API responds
+    for (let i = 1; i < STEPS.length; i++) {
+      timers.push(setTimeout(() => setActiveStep(i), i * 2000));
     }
-
-    timers.push(
-      setTimeout(() => {
-        onComplete();
-      }, STEPS.length * 1200 + 500)
-    );
-
     return () => timers.forEach(clearTimeout);
-  }, [onComplete]);
+  }, []);
+
+  // Call the simulation API
+  useEffect(() => {
+    if (calledRef.current) return;
+    calledRef.current = true;
+
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const res = await fetch("/api/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            policy: formData.description,
+            location: formData.location || "Quezon City",
+            lat: formData.lat,
+            lng: formData.lng,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => null) as { error?: string } | null;
+          throw new Error(
+            body?.error || `Simulation failed (${res.status})`
+          );
+        }
+
+        const result = (await res.json()) as SimulationResult & {
+          simulation_id: string;
+        };
+
+        // Jump to final step then complete
+        setActiveStep(STEPS.length);
+        setTimeout(() => onComplete(result), 600);
+      } catch (err: unknown) {
+        if ((err as Error).name === "AbortError") return;
+        setError((err as Error).message);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [formData, onComplete]);
 
   return (
     <div
@@ -88,7 +130,7 @@ export default function SimulationLoading({
                     {step}
                   </span>
                 </div>
-                {isActive && (
+                {isActive && !error && (
                   <span
                     className="ml-3 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
                     style={{
@@ -101,11 +143,30 @@ export default function SimulationLoading({
           })}
         </div>
 
-        <hr className="my-6 border-border-light" />
+        {error && (
+          <>
+            <hr className="my-6 border-border-light" />
+            <div className="space-y-3">
+              <p className="text-sm text-red-500">{error}</p>
+              <button
+                type="button"
+                onClick={onError}
+                className="text-sm font-medium text-accent hover:underline"
+              >
+                Back to form
+              </button>
+            </div>
+          </>
+        )}
 
-        <p className="text-xs text-muted-light">
-          Analyzing against 73 historical policy cases
-        </p>
+        {!error && (
+          <>
+            <hr className="my-6 border-border-light" />
+            <p className="text-xs text-muted-light">
+              Analyzing against historical policy knowledge graph
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

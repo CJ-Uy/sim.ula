@@ -5,7 +5,16 @@ import type { SimulateRequest } from '@/lib/types';
 
 export async function POST(request: Request) {
   const env = await getEnv();
-  const body = (await request.json()) as SimulateRequest;
+
+  let body: SimulateRequest;
+  try {
+    body = (await request.json()) as SimulateRequest;
+  } catch {
+    return Response.json(
+      { error: 'Invalid or empty request body — expected JSON with "policy" and "location"' },
+      { status: 400 }
+    );
+  }
 
   if (!body.policy || !body.location) {
     return Response.json(
