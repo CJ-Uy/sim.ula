@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { SimulationResult } from "@/lib/types";
 
 interface SavedSimulation {
   id: string;
@@ -10,9 +11,20 @@ interface SavedSimulation {
   created_at: string | null;
 }
 
-export default function PolicyHistory({ onBack }: { onBack: () => void }) {
+interface PolicyHistoryProps {
+  onBack: () => void;
+  onSelect: (
+    result: SimulationResult & { simulation_id: string },
+    policy: string,
+    location: string
+  ) => void;
+}
+
+export default function PolicyHistory({ onBack, onSelect }: PolicyHistoryProps) {
   const [simulations, setSimulations] = useState<SavedSimulation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -28,6 +40,29 @@ export default function PolicyHistory({ onBack }: { onBack: () => void }) {
       }
     })();
   }, []);
+
+  const handleClick = async (sim: SavedSimulation) => {
+    setLoadingId(sim.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/simulate/get?id=${encodeURIComponent(sim.id)}`);
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`);
+      const data = (await res.json()) as {
+        simulation_id: string;
+        policy: string;
+        location: string;
+        result: SimulationResult;
+      };
+      onSelect(
+        { simulation_id: data.simulation_id, ...data.result },
+        data.policy,
+        data.location
+      );
+    } catch (err) {
+      setError(`Could not load simulation: ${err}`);
+      setLoadingId(null);
+    }
+  };
 
   const formatDate = (d: string | null) => {
     if (!d) return "—";
@@ -50,10 +85,10 @@ export default function PolicyHistory({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border-light bg-surface px-6 py-4">
+      <div className="flex items-center justify-between border-b border-border-light bg-surface px-4 py-3 sm:px-6 sm:py-4">
         <div>
-          <h1 className="font-serif text-lg font-semibold">Your Policies</h1>
-          <p className="text-xs text-muted-light">
+          <h1 className="font-serif text-base sm:text-lg font-semibold">Your Policies</h1>
+          <p className="text-[11px] sm:text-xs text-muted-light">
             Previously simulated policies
           </p>
         </div>
@@ -66,7 +101,13 @@ export default function PolicyHistory({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+        {error && (
+          <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {error}
+          </div>
+        )}
+
         {loading && (
           <div className="flex items-center justify-center py-20">
             <span
@@ -89,9 +130,12 @@ export default function PolicyHistory({ onBack }: { onBack: () => void }) {
         {!loading && simulations.length > 0 && (
           <div className="mx-auto max-w-3xl space-y-3">
             {simulations.map((sim) => (
-              <div
+              <button
                 key={sim.id}
-                className="border border-border-light bg-surface p-4 transition-colors hover:border-accent/30"
+                type="button"
+                onClick={() => handleClick(sim)}
+                disabled={loadingId === sim.id}
+                className="w-full text-left border border-border-light bg-surface p-4 transition-colors hover:border-accent/30 hover:bg-background disabled:opacity-60"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
@@ -125,20 +169,39 @@ export default function PolicyHistory({ onBack }: { onBack: () => void }) {
                       <span>{formatDate(sim.created_at)}</span>
                     </div>
                   </div>
-                  {sim.sustainability_score != null && (
-                    <div className="shrink-0 text-right">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-light">
-                        Score
-                      </p>
-                      <p
-                        className={`font-serif text-2xl font-bold leading-none ${scoreColor(sim.sustainability_score)}`}
+                  <div className="flex items-center gap-3 shrink-0">
+                    {sim.sustainability_score != null && (
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-light">
+                          Score
+                        </p>
+                        <p
+                          className={`font-serif text-2xl font-bold leading-none ${scoreColor(sim.sustainability_score)}`}
+                        >
+                          {sim.sustainability_score}
+                        </p>
+                      </div>
+                    )}
+                    {loadingId === sim.id ? (
+                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                    ) : (
+                      <svg
+                        className="h-4 w-4 text-muted-light"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
                       >
-                        {sim.sustainability_score}
-                      </p>
-                    </div>
-                  )}
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

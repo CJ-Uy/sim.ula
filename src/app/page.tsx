@@ -201,6 +201,15 @@ export default function Home() {
     setScreen("loading");
   }, []);
 
+  const handleHistorySelect = useCallback(
+    (result: SimulationResult & { simulation_id: string }, policy: string, location: string) => {
+      setFormData(prev => ({ ...prev, description: policy, location }));
+      setSimulationResult(result);
+      setScreen("results");
+    },
+    []
+  );
+
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <Header
@@ -273,7 +282,7 @@ export default function Home() {
 
       {screen === "history" && (
         <main className="min-h-0 flex-1 overflow-hidden">
-          <PolicyHistory onBack={() => setScreen("input")} />
+          <PolicyHistory onBack={() => setScreen("input")} onSelect={handleHistorySelect} />
         </main>
       )}
     </div>

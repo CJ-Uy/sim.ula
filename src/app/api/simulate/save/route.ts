@@ -1,5 +1,5 @@
 // app/api/simulate/save/route.ts
-import { d1Query } from '@/lib/d1-rest';
+import { d1Query, r2Put } from '@/lib/d1-rest';
 
 export async function POST(request: Request) {
   let body: {
@@ -23,13 +23,29 @@ export async function POST(request: Request) {
     ? (body.result.sustainability_score as Record<string, unknown>).after ?? null
     : null;
 
+  // Save metadata to D1
   try {
     await d1Query(
       `INSERT OR IGNORE INTO simulations (id, input_policy, input_location, sustainability_score, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
       [body.simulation_id, (body.policy ?? '').slice(0, 200), (body.location ?? '').slice(0, 100), score]
     );
   } catch (err) {
-    console.error('[simulate/save]', err);
+    console.error('[simulate/save] D1 error:', err);
+  }
+
+  // Save full result to R2
+  try {
+    await r2Put(
+      `simulations/${body.simulation_id}.json`,
+      JSON.stringify({
+        simulation_id: body.simulation_id,
+        policy: body.policy,
+        location: body.location,
+        result: body.result,
+      })
+    );
+  } catch (err) {
+    console.error('[simulate/save] R2 error:', err);
   }
 
   return Response.json({ saved: true });
