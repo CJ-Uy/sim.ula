@@ -229,7 +229,7 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
   const [truncated, setTruncated] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Fetch graph data
   useEffect(() => {
@@ -250,14 +250,22 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
       .finally(() => setLoading(false));
   }, [docId]);
 
-  // Track container size for canvas sizing
+  // Track container size for canvas sizing — measure eagerly on mount
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const obs = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      setDimensions({ width, height });
-    });
+
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        setDimensions({ width: Math.floor(width), height: Math.floor(height) });
+      }
+    };
+
+    // Measure immediately
+    measure();
+
+    const obs = new ResizeObserver(() => measure());
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
@@ -345,77 +353,77 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     return ((link as GraphEdge).weight ?? 1) * 1.5;
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex h-full w-full items-center justify-center gap-3 text-sm text-muted">
-        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-        Loading graph…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 max-w-sm text-center">
-          <span className="font-medium">Failed to load graph:</span> {error}
-        </div>
-      </div>
-    );
-  }
-
-  if (!graphData || graphData.nodes.length === 0) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <p className="text-sm text-muted-light">No graph data yet. Ingest some documents first.</p>
-      </div>
-    );
-  }
+  const ready = !loading && !error && graphData && graphData.nodes.length > 0 && dimensions;
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-[#fafaf9]">
-      {truncated && (
-        <div className="absolute top-0 left-0 right-0 z-10 bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-800 text-center">
-          Showing first 500 nodes. Use document filter for a focused view.
+      {loading && (
+        <div className="flex h-full w-full items-center justify-center gap-3 text-sm text-muted">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+          Loading graph…
         </div>
       )}
 
-      <ForceGraph2D
-        backgroundColor="#fafaf9"
-        width={dimensions.width}
-        height={dimensions.height}
-        graphData={fgData}
-        nodeCanvasObject={nodeCanvasObject}
-        nodePointerAreaPaint={nodePointerAreaPaint}
-        linkColor={linkColorFn}
-        linkWidth={linkWidthFn}
-        linkDirectionalArrowLength={4}
-        linkDirectionalArrowRelPos={1}
-        onNodeClick={handleNodeClick}
-        onLinkClick={handleLinkClick}
-        onBackgroundClick={() => setSelection(null)}
-        cooldownTicks={100}
-        warmupTicks={50}
-        d3AlphaDecay={0.02}
-        nodeLabel=""
-      />
-
-      <GraphLegend />
-
-      {selection?.kind === "node" && (
-        <NodeCard
-          node={selection.data}
-          docs={docs}
-          onClose={() => setSelection(null)}
-        />
+      {error && (
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 max-w-sm text-center">
+            <span className="font-medium">Failed to load graph:</span> {error}
+          </div>
+        </div>
       )}
-      {selection?.kind === "edge" && (
-        <EdgeCard
-          edge={selection.data}
-          sourceName={selection.sourceName}
-          targetName={selection.targetName}
-          onClose={() => setSelection(null)}
-        />
+
+      {!loading && !error && (!graphData || graphData.nodes.length === 0) && (
+        <div className="flex h-full w-full items-center justify-center">
+          <p className="text-sm text-muted-light">No graph data yet. Ingest some documents first.</p>
+        </div>
+      )}
+
+      {ready && (
+        <>
+          {truncated && (
+            <div className="absolute top-0 left-0 right-0 z-10 bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-800 text-center">
+              Showing first 500 nodes. Use document filter for a focused view.
+            </div>
+          )}
+
+          <ForceGraph2D
+            backgroundColor="#fafaf9"
+            width={dimensions.width}
+            height={dimensions.height}
+            graphData={fgData}
+            nodeCanvasObject={nodeCanvasObject}
+            nodePointerAreaPaint={nodePointerAreaPaint}
+            linkColor={linkColorFn}
+            linkWidth={linkWidthFn}
+            linkDirectionalArrowLength={4}
+            linkDirectionalArrowRelPos={1}
+            onNodeClick={handleNodeClick}
+            onLinkClick={handleLinkClick}
+            onBackgroundClick={() => setSelection(null)}
+            cooldownTicks={100}
+            warmupTicks={50}
+            d3AlphaDecay={0.02}
+            nodeLabel=""
+          />
+
+          <GraphLegend />
+
+          {selection?.kind === "node" && (
+            <NodeCard
+              node={selection.data}
+              docs={docs}
+              onClose={() => setSelection(null)}
+            />
+          )}
+          {selection?.kind === "edge" && (
+            <EdgeCard
+              edge={selection.data}
+              sourceName={selection.sourceName}
+              targetName={selection.targetName}
+              onClose={() => setSelection(null)}
+            />
+          )}
+        </>
       )}
     </div>
   );

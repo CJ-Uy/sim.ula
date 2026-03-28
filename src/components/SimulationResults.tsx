@@ -51,7 +51,7 @@ export default function SimulationResults({
 
   return (
     <div
-      className="mx-auto w-full max-w-[760px] px-6 py-12"
+      className="w-full px-8 py-12 lg:px-16"
       style={{ animation: "fade-in 300ms ease" }}
     >
       {/* Section A — Header */}

@@ -154,7 +154,7 @@ export default function Home() {
       )}
 
       {screen === "results" && (
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main className="min-h-0 w-full flex-1 overflow-y-auto">
           <SimulationResults formData={formData} onReset={handleReset} />
         </main>
       )}

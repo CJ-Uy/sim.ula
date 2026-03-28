@@ -18,7 +18,6 @@ interface DocRow {
 }
 
 type DeleteState = "idle" | "confirming" | "deleting";
-type DashView = "list" | "graph";
 
 function SourceTypePill({ type }: { type: string }) {
   const colors: Record<string, string> = {
@@ -234,7 +233,6 @@ export default function DocumentDashboard({ onBack }: DocumentDashboardProps) {
   const [docs, setDocs] = useState<DocRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<DashView>("list");
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
@@ -269,30 +267,6 @@ export default function DocumentDashboard({ onBack }: DocumentDashboardProps) {
           </p>
         </div>
 
-        {/* Tab toggle */}
-        <div className="flex items-center gap-0.5 rounded border border-border bg-background p-0.5">
-          <button
-            onClick={() => setView("list")}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              view === "list"
-                ? "bg-surface text-foreground shadow-sm"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            Documents
-          </button>
-          <button
-            onClick={() => setView("graph")}
-            className={`px-3 py-1 text-xs rounded transition-colors ${
-              view === "graph"
-                ? "bg-surface text-foreground shadow-sm"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            Graph
-          </button>
-        </div>
-
         <div className="flex items-center gap-3">
           <button
             onClick={fetchDocs}
@@ -310,46 +284,50 @@ export default function DocumentDashboard({ onBack }: DocumentDashboardProps) {
         </div>
       </div>
 
-      {/* Body */}
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {view === "list" && (
-          <div className="h-full overflow-y-auto px-6 py-6">
-            {loading && (
-              <div className="flex items-center gap-3 text-sm text-muted py-8 justify-center">
-                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-                Loading documents…
-              </div>
-            )}
-
-            {error && (
-              <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                <span className="font-medium">Failed to load:</span> {error}
-              </div>
-            )}
-
-            {!loading && !error && docs.length === 0 && (
-              <div className="py-16 text-center text-sm text-muted-light">
-                No documents ingested yet.
-              </div>
-            )}
-
-            {!loading && docs.length > 0 && (
-              <div className="space-y-2">
-                {docs.map((doc) => (
-                  <DocRow key={doc.id} doc={doc} onDeleted={handleDeleted} />
-                ))}
-              </div>
-            )}
-
-            <div className="mt-8">
-              <PolicyTypesManager />
-            </div>
-          </div>
-        )}
-
-        {view === "graph" && (
+      {/* Body — single scrollable page: graph on top, documents below */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Graph section */}
+        <div className="h-[50vh] min-h-[400px] border-b border-border-light">
           <GraphView docs={docs} />
-        )}
+        </div>
+
+        {/* Documents section */}
+        <div className="px-6 py-6">
+          <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-wide text-foreground/70">
+            Documents
+          </h3>
+
+          {loading && (
+            <div className="flex items-center gap-3 text-sm text-muted py-8 justify-center">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              Loading documents…
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <span className="font-medium">Failed to load:</span> {error}
+            </div>
+          )}
+
+          {!loading && !error && docs.length === 0 && (
+            <div className="py-16 text-center text-sm text-muted-light">
+              No documents ingested yet.
+            </div>
+          )}
+
+          {!loading && docs.length > 0 && (
+            <div className="space-y-2">
+              {docs.map((doc) => (
+                <DocRow key={doc.id} doc={doc} onDeleted={handleDeleted} />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-8">
+            <PolicyTypesManager />
+          </div>
+        </div>
       </div>
     </div>
   );
