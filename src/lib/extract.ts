@@ -86,18 +86,20 @@ CRITICAL RULES:
 async function getExistingNodesContext(env: Env): Promise<string> {
   const db = getDb(env);
 
-  // Fetch ALL location nodes (critical for graph connectivity) + up to 200 other nodes
+  // Fetch location nodes (capped at 50) + up to 80 other nodes
+  // Keeping this bounded prevents the extraction prompt from exceeding context limits
   const locations = await db
     .select({ id: schema.nodes.id, type: schema.nodes.type, name: schema.nodes.name })
     .from(schema.nodes)
     .where(eq(schema.nodes.type, 'location'))
+    .limit(50)
     .all();
 
   const others = await db
     .select({ id: schema.nodes.id, type: schema.nodes.type, name: schema.nodes.name })
     .from(schema.nodes)
     .where(ne(schema.nodes.type, 'location'))
-    .limit(200)
+    .limit(80)
     .all();
 
   const existing = [...locations, ...others];
