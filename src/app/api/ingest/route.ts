@@ -1,6 +1,7 @@
 // app/api/ingest/route.ts
 import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
+import { sql, eq } from 'drizzle-orm';
 import { extractEntities, resolveEntities } from '@/lib/extract';
 import { getEmbedding } from '@/lib/llm';
 import type { IngestRequest } from '@/lib/types';
@@ -109,16 +110,33 @@ export async function POST(request: Request) {
             nodesInserted++;
           }
 
-          // 5. Insert edges
+          // 5. Insert edges (skip duplicates: same source, target, and relationship)
           send({ step: 'edges', message: `Saving ${extracted.edges.length} relationships…` });
           let edgesInserted = 0;
           for (const edge of extracted.edges) {
-            await db.insert(schema.edges).values({
-              source_id: edge.source_id,
-              target_id: edge.target_id,
-              relationship: edge.relationship as typeof schema.edges.$inferInsert['relationship'],
-              metadata: JSON.stringify(edge.metadata ?? {}),
-            });
+            const existing = await db
+              .select({ id: schema.edges.id })
+              .from(schema.edges)
+              .where(
+                sql`${schema.edges.source_id} = ${edge.source_id}
+                  AND ${schema.edges.target_id} = ${edge.target_id}
+                  AND ${schema.edges.relationship} = ${edge.relationship}`
+              )
+              .get();
+
+            if (existing) {
+              await db
+                .update(schema.edges)
+                .set({ metadata: JSON.stringify(edge.metadata ?? {}) })
+                .where(eq(schema.edges.id, existing.id));
+            } else {
+              await db.insert(schema.edges).values({
+                source_id: edge.source_id,
+                target_id: edge.target_id,
+                relationship: edge.relationship as typeof schema.edges.$inferInsert['relationship'],
+                metadata: JSON.stringify(edge.metadata ?? {}),
+              });
+            }
             edgesInserted++;
           }
 
@@ -135,12 +153,24 @@ export async function POST(request: Request) {
         }
       }
 
-  return Response.json({
-    results,
-    summary: {
-      total: results.length,
-      succeeded: results.filter((r) => r.status === 'success').length,
-      failed: results.filter((r) => r.status === 'error').length,
+      send({
+        step: 'done',
+        results,
+        summary: {
+          total: results.length,
+          succeeded: results.filter((r) => r.status === 'success').length,
+          failed: results.filter((r) => r.status === 'error').length,
+        },
+      });
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     },
   });
 }

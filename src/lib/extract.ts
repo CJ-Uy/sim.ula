@@ -1,16 +1,12 @@
 // src/lib/extract.ts
 import type { Env, ExtractedGraph } from './types';
-<<<<<<< HEAD
-import { callLLM } from './llm';
-import { getDb, schema } from '@/db';
-=======
 import { callLLM, getEmbedding } from './llm';
+import { getDb, schema } from '@/db';
 
 // Cosine similarity threshold above which two nodes are considered the same entity.
 // 0.87 avoids false positives between related-but-distinct concepts while catching
 // genuine duplicates like "Quezon City" vs "QC Metro Manila".
 const RESOLUTION_THRESHOLD = 0.87;
->>>>>>> a5adfbb1736063ac86a0fb83a3f039ededd85714
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a policy analysis expert specializing in Philippine urban governance. Given a document about urban policy in Quezon City, Metro Manila, extract structured entities and relationships.
 
