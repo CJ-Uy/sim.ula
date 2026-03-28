@@ -38,7 +38,8 @@
 		{
 			"binding": "DB",
 			"database_name": "simula",
-			"database_id": "c401b2f1-a1d1-4b15-b714-e297ca7d5ddc"
+			"database_id": "c401b2f1-a1d1-4b15-b714-e297ca7d5ddc",
+			"remote": true
 		}
 	],
 
@@ -46,7 +47,8 @@
 	"vectorize": [
 		{
 			"binding": "VECTOR_INDEX",
-			"index_name": "simula-embeddings"
+			"index_name": "simula-embeddings",
+			"remote": true
 		}
 	],
 
@@ -54,7 +56,8 @@
 	"r2_buckets": [
 		{
 			"binding": "DOCS_BUCKET",
-			"bucket_name": "simula"
+			"bucket_name": "simula",
+			"remote": true
 		}
 	],
 
@@ -62,13 +65,15 @@
 	"kv_namespaces": [
 		{
 			"binding": "CACHE",
-			"id": "71be366a02e542e4b40970ac44f7383e"
+			"id": "71be366a02e542e4b40970ac44f7383e",
+			"remote": true
 		}
 	],
 
 	// Workers AI — fallback LLM + embeddings when Ollama is unreachable
 	"ai": {
-		"binding": "AI"
+		"binding": "AI",
+		"remote": true
 	},
 
 	// Service URLs — actual values come from .dev.vars (local) or Pages dashboard (prod)
