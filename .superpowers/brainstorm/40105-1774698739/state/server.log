@@ -1,0 +1,4 @@
+{"type":"server-started","port":53296,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:53296","screen_dir":"/Users/jjpardo/Documents/sim.ula/.superpowers/brainstorm/40105-1774698739/content","state_dir":"/Users/jjpardo/Documents/sim.ula/.superpowers/brainstorm/40105-1774698739/state"}
+{"type":"screen-added","file":"/Users/jjpardo/Documents/sim.ula/.superpowers/brainstorm/40105-1774698739/content/map-layout.html"}
+{"type":"screen-added","file":"/Users/jjpardo/Documents/sim.ula/.superpowers/brainstorm/40105-1774698739/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

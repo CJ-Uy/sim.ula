@@ -1,0 +1,165 @@
+<h2>Policy Input Page: Map + Form Layout</h2>
+<p class="subtitle">60% map (left) / 40% form (right) — vulnerability data layers on the map</p>
+
+<div class="section">
+  <h3>Proposed Layout</h3>
+  <div class="mockup">
+    <div class="mockup-header">sim.ula — Urban Policy Simulation Platform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; v0.1</div>
+    <div class="mockup-body" style="display:flex; height:520px; padding:0; overflow:hidden;">
+
+      <!-- Map panel (60%) -->
+      <div style="width:60%; background:#e8f4f0; position:relative; border-right:1px solid #d6d3d1;">
+        <!-- Fake map background -->
+        <div style="position:absolute; inset:0; background:
+          linear-gradient(135deg, #d1fae5 0%, #a7f3d0 20%, #bef264 35%, #fde68a 50%, #fbbf24 65%, #f87171 80%, #ef4444 100%);
+          opacity:0.3;"></div>
+
+        <!-- Map street grid mockup -->
+        <div style="position:absolute; inset:0; opacity:0.15;">
+          <div style="position:absolute; top:0; left:30%; width:1px; height:100%; background:#1c1917;"></div>
+          <div style="position:absolute; top:0; left:55%; width:1px; height:100%; background:#1c1917;"></div>
+          <div style="position:absolute; top:0; left:78%; width:1px; height:100%; background:#1c1917;"></div>
+          <div style="position:absolute; top:25%; left:0; width:100%; height:1px; background:#1c1917;"></div>
+          <div style="position:absolute; top:50%; left:0; width:100%; height:1px; background:#1c1917;"></div>
+          <div style="position:absolute; top:75%; left:0; width:100%; height:1px; background:#1c1917;"></div>
+        </div>
+
+        <!-- Layer toggle panel -->
+        <div style="position:absolute; top:12px; left:12px; background:white; border:1px solid #d6d3d1; padding:10px 14px; font-size:12px; z-index:2; min-width:180px;">
+          <div style="font-weight:600; text-transform:uppercase; letter-spacing:0.05em; font-size:11px; color:#78716c; margin-bottom:8px;">Vulnerability Layers</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <span style="width:10px; height:10px; background:#ef4444; display:inline-block;"></span>
+              <span>Heat Index</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <span style="width:10px; height:10px; background:#3b82f6; display:inline-block;"></span>
+              <span>Flood Risk</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <span style="width:10px; height:10px; background:#f59e0b; display:inline-block;"></span>
+              <span>Traffic Congestion</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <span style="width:10px; height:10px; background:#8b5cf6; display:inline-block;"></span>
+              <span>Air Quality</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Heat zone blobs -->
+        <div style="position:absolute; top:15%; left:40%; width:120px; height:80px; background:rgba(239,68,68,0.25); border-radius:50%; filter:blur(15px);"></div>
+        <div style="position:absolute; top:55%; left:20%; width:90px; height:70px; background:rgba(239,68,68,0.2); border-radius:50%; filter:blur(12px);"></div>
+
+        <!-- Flood zone -->
+        <div style="position:absolute; top:60%; left:50%; width:150px; height:100px; background:rgba(59,130,246,0.2); border-radius:40%; filter:blur(10px);"></div>
+
+        <!-- Location marker -->
+        <div style="position:absolute; top:40%; left:48%; z-index:2;">
+          <div style="width:12px; height:12px; background:#0f766e; border:2px solid white; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+        </div>
+
+        <!-- Info tooltip -->
+        <div style="position:absolute; top:32%; left:50%; background:white; border:1px solid #d6d3d1; padding:8px 12px; font-size:11px; z-index:3; min-width:160px;">
+          <div style="font-weight:600; font-size:12px;">Barangay Commonwealth</div>
+          <div style="color:#78716c; margin-top:4px;">Heat Index: <span style="color:#ef4444; font-weight:600;">38°C</span></div>
+          <div style="color:#78716c;">Flood Risk: <span style="color:#f59e0b; font-weight:600;">Moderate</span></div>
+          <div style="color:#78716c;">AQI: <span style="color:#16a34a; font-weight:600;">42 (Good)</span></div>
+        </div>
+
+        <!-- Map attribution -->
+        <div style="position:absolute; bottom:4px; right:8px; font-size:9px; color:#78716c; opacity:0.7;">
+          © OpenFreeMap · Open-Meteo · Project NOAH
+        </div>
+      </div>
+
+      <!-- Form panel (40%) -->
+      <div style="width:40%; background:#fafaf9; overflow-y:auto; padding:24px 20px; font-size:13px;">
+        <div style="font-size:18px; font-family:serif; font-weight:600; margin-bottom:4px;">New Policy Simulation</div>
+        <div style="font-size:12px; color:#78716c; margin-bottom:20px;">Define your policy proposal parameters.</div>
+        <hr style="border:none; border-top:1px solid #e7e5e4; margin-bottom:16px;">
+
+        <!-- Mock form fields -->
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(28,25,23,0.7); margin-bottom:4px;">Policy Type <span style="color:#0f766e">*</span></div>
+          <div style="border:1px solid #d6d3d1; padding:8px 10px; background:white; color:#a8a29e;">Select type</div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(28,25,23,0.7); margin-bottom:4px;">Category <span style="color:#0f766e">*</span></div>
+          <div style="border:1px solid #d6d3d1; padding:8px 10px; background:white; color:#a8a29e;">Select category</div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(28,25,23,0.7); margin-bottom:4px;">Description <span style="color:#0f766e">*</span></div>
+          <div style="border:1px solid #d6d3d1; padding:8px 10px; background:white; height:60px; color:#a8a29e;">Describe the policy...</div>
+        </div>
+        <div style="display:flex; gap:10px; margin-bottom:14px;">
+          <div style="flex:1;">
+            <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(28,25,23,0.7); margin-bottom:4px;">Start</div>
+            <div style="border:1px solid #d6d3d1; padding:8px 10px; background:white; color:#a8a29e; font-size:12px;">mm/dd/yyyy</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(28,25,23,0.7); margin-bottom:4px;">End</div>
+            <div style="border:1px solid #d6d3d1; padding:8px 10px; background:white; color:#a8a29e; font-size:12px;">mm/dd/yyyy</div>
+          </div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(28,25,23,0.7); margin-bottom:4px;">Location</div>
+          <div style="border:1px solid #d6d3d1; padding:8px 10px; background:white; color:#0f766e; font-size:12px;">📍 Barangay Commonwealth <span style="color:#a8a29e; font-size:11px;">(click map to set)</span></div>
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(28,25,23,0.7); margin-bottom:4px;">Implementing Agency</div>
+          <div style="border:1px solid #d6d3d1; padding:8px 10px; background:white; color:#a8a29e;">e.g., Dept. of Public Works</div>
+        </div>
+        <hr style="border:none; border-top:1px solid #e7e5e4; margin-bottom:16px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <div style="background:#0f766e; color:white; padding:8px 20px; font-size:13px; font-weight:500;">Run Simulation</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:32px;">
+  <h3>Data Layers (all free, no credit card)</h3>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div style="border:1px solid #e5e5e5; padding:16px; border-radius:4px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="width:10px; height:10px; background:#ef4444; display:inline-block;"></span>
+        <strong>Heat Index</strong>
+      </div>
+      <p style="font-size:13px; color:#666; margin:0;">Open-Meteo API — real-time temperature & apparent temp. No API key needed. 10K calls/day.</p>
+    </div>
+    <div style="border:1px solid #e5e5e5; padding:16px; border-radius:4px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="width:10px; height:10px; background:#3b82f6; display:inline-block;"></span>
+        <strong>Flood Risk</strong>
+      </div>
+      <p style="font-size:13px; color:#666; margin:0;">Project NOAH GeoJSON — Philippine government flood hazard data. Pre-converted shapefiles as static overlay.</p>
+    </div>
+    <div style="border:1px solid #e5e5e5; padding:16px; border-radius:4px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="width:10px; height:10px; background:#f59e0b; display:inline-block;"></span>
+        <strong>Traffic Congestion</strong>
+      </div>
+      <p style="font-size:13px; color:#666; margin:0;">TomTom Traffic Flow tiles — real-time raster overlay. Free key, 50K tile req/day.</p>
+    </div>
+    <div style="border:1px solid #e5e5e5; padding:16px; border-radius:4px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="width:10px; height:10px; background:#8b5cf6; display:inline-block;"></span>
+        <strong>Air Quality</strong>
+      </div>
+      <p style="font-size:13px; color:#666; margin:0;">WAQI API — AQI + pollutant readings. Free token, 1K req/sec. Good PH coverage.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:32px;">
+  <h3>Key Interactions</h3>
+  <ul style="font-size:14px; line-height:1.8; color:#444;">
+    <li><strong>Click map → sets Location field</strong> in the form (reverse geocode via Open-Meteo/Nominatim)</li>
+    <li><strong>Toggle layers</strong> via the control panel (top-left of map)</li>
+    <li><strong>Hover on map</strong> → tooltip shows vulnerability data for that point</li>
+    <li><strong>Map stays full-height</strong> (viewport height minus header), form scrolls independently</li>
+    <li><strong>On mobile:</strong> stacks vertically — map on top (40vh), form below</li>
+  </ul>
+</div>

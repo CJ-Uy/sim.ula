@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 const POLICY_TYPES = [
   "Ordinance",
@@ -27,11 +27,17 @@ export interface PolicyFormData {
   startDate: string;
   endDate: string;
   location: string;
+  lat?: number;
+  lng?: number;
   agency: string;
 }
 
 interface PolicyInputProps {
   onSubmit: (data: PolicyFormData) => void;
+  selectedLocation?: string;
+  selectedLat?: number;
+  selectedLng?: number;
+  onLocationSearch?: (location: string, lat: number, lng: number) => void;
 }
 
 function FieldLabel({
@@ -49,47 +55,88 @@ function FieldLabel({
   );
 }
 
-export default function PolicyInput({ onSubmit }: PolicyInputProps) {
+export default function PolicyInput({
+  onSubmit,
+  selectedLocation,
+  selectedLat,
+  selectedLng,
+  onLocationSearch,
+}: PolicyInputProps) {
   const [policyType, setPolicyType] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [location, setLocation] = useState("");
   const [agency, setAgency] = useState("");
+  const [locationInput, setLocationInput] = useState(selectedLocation || "");
+  const [isGeocoding, setIsGeocoding] = useState(false);
+
+  // Sync when map click updates selectedLocation
+  useEffect(() => {
+    if (selectedLocation) {
+      setLocationInput(selectedLocation);
+    }
+  }, [selectedLocation]);
+
+  const geocodeLocation = useCallback(
+    async (query: string) => {
+      if (!query.trim() || !onLocationSearch) return;
+      setIsGeocoding(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+          { headers: { "User-Agent": "SimBayan/0.1" } }
+        );
+        const results = (await res.json()) as Array<{
+          lat: string;
+          lon: string;
+          display_name: string;
+        }>;
+        if (results.length > 0) {
+          const { lat, lon, display_name } = results[0];
+          const name = display_name.split(",").slice(0, 2).join(",").trim();
+          setLocationInput(name);
+          onLocationSearch(name, parseFloat(lat), parseFloat(lon));
+        }
+      } catch {
+        // Geocoding failed — keep input as-is
+      } finally {
+        setIsGeocoding(false);
+      }
+    },
+    [onLocationSearch]
+  );
 
   const canSubmit =
     policyType !== "" && category !== "" && description.length > 20;
 
   return (
     <div
-      className="mx-auto w-full max-w-[680px] px-6 py-12"
+      className="px-6 py-8"
       style={{ animation: "fade-in 300ms ease" }}
     >
       {/* Page heading */}
-      <div className="mb-10">
-        <h1 className="font-serif text-[1.75rem] font-semibold leading-tight text-foreground">
+      <div className="mb-8">
+        <h1 className="font-serif text-[1.5rem] font-semibold leading-tight text-foreground">
           New Policy Simulation
         </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-muted">
-          Define the parameters of your policy proposal. The simulation will
-          analyze projected impact across economic, environmental, and social
-          dimensions.
+        <p className="mt-1.5 text-sm leading-relaxed text-muted">
+          Define policy parameters. Click the map to set a location.
         </p>
       </div>
 
-      <hr className="mb-10 border-border-light" />
+      <hr className="mb-8 border-border-light" />
 
       {/* Form sections */}
-      <div className="space-y-9">
+      <div className="space-y-7">
         {/* Row: Policy Type + Category */}
-        <div className="grid gap-8 sm:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-2">
           <div>
             <FieldLabel required>Policy Type</FieldLabel>
             <select
               value={policyType}
               onChange={(e) => setPolicyType(e.target.value)}
-              className={`w-full border border-border bg-surface px-3 py-2.5 text-[15px] outline-none transition-colors focus:border-accent ${
+              className={`w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent ${
                 policyType === "" ? "text-muted-light" : "text-foreground"
               }`}
             >
@@ -109,7 +156,7 @@ export default function PolicyInput({ onSubmit }: PolicyInputProps) {
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className={`w-full border border-border bg-surface px-3 py-2.5 text-[15px] outline-none transition-colors focus:border-accent ${
+              className={`w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent ${
                 category === "" ? "text-muted-light" : "text-foreground"
               }`}
             >
@@ -129,15 +176,15 @@ export default function PolicyInput({ onSubmit }: PolicyInputProps) {
         <div>
           <FieldLabel required>Description</FieldLabel>
           <textarea
-            rows={5}
+            rows={4}
             maxLength={1000}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the policy proposal, its objectives, and expected scope of implementation..."
-            className="w-full border border-border bg-surface px-3 py-2.5 text-[15px] leading-relaxed outline-none transition-colors placeholder:text-muted-light focus:border-accent"
+            placeholder="Describe the policy proposal, its objectives, and expected scope..."
+            className="w-full border border-border bg-surface px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-muted-light focus:border-accent"
           />
-          <div className="mt-1.5 flex justify-between">
-            <p className="text-xs text-muted-light">Minimum 20 characters</p>
+          <div className="mt-1 flex justify-between">
+            <p className="text-xs text-muted-light">Min. 20 characters</p>
             {description.length > 0 && (
               <p className="text-xs text-muted-light">
                 {description.length}/1,000
@@ -151,64 +198,73 @@ export default function PolicyInput({ onSubmit }: PolicyInputProps) {
         {/* Timeline row */}
         <div>
           <FieldLabel>Implementation Timeline</FieldLabel>
-          <div className="grid gap-6 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs text-muted">
-                Start date
-              </label>
+              <label className="mb-1 block text-xs text-muted">Start</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full border border-border bg-surface px-3 py-2.5 text-[15px] outline-none transition-colors focus:border-accent"
+                className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs text-muted">
-                End date
-              </label>
+              <label className="mb-1 block text-xs text-muted">End</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full border border-border bg-surface px-3 py-2.5 text-[15px] outline-none transition-colors focus:border-accent"
+                className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent"
               />
             </div>
           </div>
         </div>
 
-        {/* Location + Agency row */}
-        <div className="grid gap-8 sm:grid-cols-2">
-          <div>
-            <FieldLabel>Location</FieldLabel>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g., Barangay Commonwealth"
-              className="w-full border border-border bg-surface px-3 py-2.5 text-[15px] outline-none transition-colors placeholder:text-muted-light focus:border-accent"
-            />
-          </div>
-          <div>
-            <FieldLabel>Implementing Agency</FieldLabel>
-            <input
-              type="text"
-              value={agency}
-              onChange={(e) => setAgency(e.target.value)}
-              placeholder="e.g., Dept. of Public Works"
-              className="w-full border border-border bg-surface px-3 py-2.5 text-[15px] outline-none transition-colors placeholder:text-muted-light focus:border-accent"
-            />
-          </div>
+        {/* Location — editable, geocodes on Enter */}
+        <div>
+          <FieldLabel>Location</FieldLabel>
+          <input
+            type="text"
+            value={locationInput}
+            onChange={(e) => setLocationInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                geocodeLocation(locationInput);
+              }
+            }}
+            onBlur={() => {
+              if (locationInput && locationInput !== selectedLocation) {
+                geocodeLocation(locationInput);
+              }
+            }}
+            placeholder="Search or click the map"
+            className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-light focus:border-accent"
+          />
+          {isGeocoding && (
+            <p className="mt-1 text-xs text-muted-light">Searching...</p>
+          )}
+        </div>
+
+        {/* Implementing Agency */}
+        <div>
+          <FieldLabel>Implementing Agency</FieldLabel>
+          <input
+            type="text"
+            value={agency}
+            onChange={(e) => setAgency(e.target.value)}
+            placeholder="e.g., Dept. of Public Works"
+            className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-light focus:border-accent"
+          />
         </div>
       </div>
 
-      <hr className="mt-10 mb-8 border-border-light" />
+      <hr className="mt-8 mb-6 border-border-light" />
 
       {/* Actions */}
       <div className="flex items-center justify-between">
-        <p className="text-xs leading-relaxed text-muted-light">
-          Fields marked with{" "}
-          <span className="text-accent">*</span> are required
+        <p className="text-xs text-muted-light">
+          <span className="text-accent">*</span> Required
         </p>
         <button
           type="button"
@@ -220,11 +276,13 @@ export default function PolicyInput({ onSubmit }: PolicyInputProps) {
               description,
               startDate,
               endDate,
-              location,
+              location: selectedLocation || "",
+              lat: selectedLat,
+              lng: selectedLng,
               agency,
             })
           }
-          className={`px-6 py-2.5 text-[15px] font-medium transition-colors ${
+          className={`px-5 py-2 text-sm font-medium transition-colors ${
             canSubmit
               ? "bg-accent text-white hover:bg-accent/90"
               : "cursor-default bg-border-light text-muted-light"

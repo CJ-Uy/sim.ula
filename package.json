@@ -14,9 +14,11 @@
 	},
 	"dependencies": {
 		"@opennextjs/cloudflare": "^1.17.1",
+		"maplibre-gl": "^5.21.1",
 		"next": "16.1.5",
 		"react": "19.1.5",
-		"react-dom": "19.1.5"
+		"react-dom": "19.1.5",
+		"react-map-gl": "^8.1.0"
 	},
 	"devDependencies": {
 		"@eslint/eslintrc": "^3",
