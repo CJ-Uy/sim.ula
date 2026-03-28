@@ -192,6 +192,67 @@ export interface SimulationResult {
   confidence_reasoning: string;
 }
 
+// ── Scraping ─────────────────────────────────────────────────────────────────
+
+export interface CityConfig {
+  id: string;           // kebab-case node ID (e.g. "singapore")
+  name: string;         // display name
+  country: string;
+  region: string;       // "NCR" | "Southeast Asia" | "East Asia" | "Europe" etc.
+  lat: number;
+  lng: number;
+  ring: number;         // 1-4
+  queriesPerRun: number; // how many topics per scrape cycle
+  everyNthCycle: number; // run every Nth cycle (1 = every cycle)
+}
+
+export interface ProximityChain {
+  source: string;       // city node ID
+  target: string;       // city node ID
+  weight: number;       // 0-1 proximity strength
+  basis: string;        // "geographic" | "national" | "cultural" | "economic" | "innovation"
+}
+
+export type ScrapeEventType =
+  | 'session_start'
+  | 'job_start'
+  | 'search_done'
+  | 'extract_done'
+  | 'crosslink_done'
+  | 'job_done'
+  | 'job_error'
+  | 'progress'
+  | 'stopped'
+  | 'cycle_done'
+  | 'complete';
+
+export interface ScrapeEvent {
+  type: ScrapeEventType;
+  city?: string;
+  topic?: string;
+  ring?: number;
+  results_count?: number;
+  policies_found?: number;
+  edges_created?: number;
+  cross_links?: number;
+  completed?: number;
+  total?: number;
+  failed?: number;
+  cycle?: number;
+  by_ring?: Record<number, { done: number; total: number }>;
+  message?: string;
+  error?: string;
+}
+
+export interface ScrapeRequest {
+  action: 'start' | 'stop';
+  rings?: number[];     // which rings to scrape (default: all)
+  resume?: boolean;     // pick up stopped jobs
+  city?: string;        // single city override
+  topic?: string;       // single topic override
+  limit?: number;       // max jobs per request
+}
+
 // ── Research / Auto-fill ──────────────────────────────────────────────────────
 
 export interface SearchResult {

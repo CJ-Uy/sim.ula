@@ -2,7 +2,7 @@
 import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
 import { sql, eq } from 'drizzle-orm';
-import { extractEntities, resolveEntities, enrichLocationEdges } from '@/lib/extract';
+import { extractEntities, resolveEntities, enrichLocationEdges, fixOrphanNodes, crossLinkNewNodes } from '@/lib/extract';
 import { getEmbedding } from '@/lib/llm';
 import type { IngestRequest } from '@/lib/types';
 
@@ -147,12 +147,22 @@ export async function POST(request: Request) {
             console.log(`[enrich] Created ${enriched.length} location hierarchy edge(s)`);
           }
 
+          // 7. Fix orphan nodes (nodes with 0 edges from this document)
+          send({ step: 'fixing-orphans', message: 'Connecting orphan nodes…' });
+          const orphansFixed = await fixOrphanNodes(env, docId, extracted.nodes);
+
+          // 8. Cross-link similar nodes across documents
+          send({ step: 'crosslinking', message: 'Cross-linking similar nodes…' });
+          const crossLinks = await crossLinkNewNodes(env, extracted.nodes, embeddingCache);
+
           results.push({
             doc_id: docId,
             title: doc.title,
             status: 'success',
             nodes_extracted: nodesInserted,
             edges_extracted: edgesInserted,
+            orphans_fixed: orphansFixed,
+            cross_links_created: crossLinks,
             model_used: modelLabel,
           });
         } catch (err) {

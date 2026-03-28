@@ -187,18 +187,41 @@ async function resolveCanonicalNodes(
   return { nodes: dedupedNodes, edges: resolvedEdges };
 }
 
+export interface CityContext {
+  id: string;
+  name: string;
+  country: string;
+}
+
 export async function extractEntities(
   env: Env,
   documentText: string,
   docId: string,
   modelOverride?: string,
-  noFallback?: boolean
+  noFallback?: boolean,
+  cityContext?: CityContext,
 ): Promise<ExtractedGraph> {
   // Fetch existing nodes to inject into the prompt
   const existingNodesContext = await getExistingNodesContext(env);
-  const systemPrompt = EXTRACTION_SYSTEM_PROMPT.replace('{EXISTING_NODES}', existingNodesContext);
+  let systemPrompt = EXTRACTION_SYSTEM_PROMPT.replace('{EXISTING_NODES}', existingNodesContext);
 
-  const prompt = `Extract all policy entities and relationships from this document about Quezon City:\n\n---\n${documentText}\n---`;
+  const cityName = cityContext?.name ?? 'Quezon City';
+  const cityId = cityContext?.id ?? 'quezon-city';
+  const countryName = cityContext?.country ?? 'Philippines';
+
+  // Parameterize the system prompt for non-QC cities
+  if (cityContext) {
+    systemPrompt = systemPrompt
+      .replace(/Quezon City, Metro Manila/g, cityName)
+      .replace(/Quezon City/g, cityName)
+      .replace(/quezon-city/g, cityId)
+      .replace(/Philippine urban governance/g, `urban governance in ${countryName}`)
+      .replace(/Philippine-specific context:.*?\./g, `Local context specific to ${cityName}, ${countryName}.`)
+      .replace(/QC has 142 barangays grouped into 6 districts\./g, '')
+      .replace(/ALL policies in this dataset are about Quezon City\./g, `ALL policies in this dataset are about ${cityName}.`);
+  }
+
+  const prompt = `Extract all policy entities and relationships from this document about ${cityName}:\n\n---\n${documentText}\n---`;
 
   const result = await callLLM(env, prompt, systemPrompt, {
     temperature: 0.2,
@@ -370,28 +393,38 @@ export async function resolveEntities(
  */
 export async function enrichLocationEdges(
   env: Env,
-  nodes: Array<{ id: string; type: string }>,
+  nodes: Array<{ id: string; type: string; name?: string }>,
+  targetCityId: string = 'quezon-city',
+  targetCityName: string = 'Quezon City',
 ): Promise<Array<{ source_id: string; target_id: string; relationship: string }>> {
   const db = getDb(env);
   const newEdges: Array<{ source_id: string; target_id: string; relationship: string }> = [];
 
-  // Ensure the quezon-city node exists
-  const qcExists = await db
+  // Ensure the target city node exists
+  const cityExists = await db
     .select({ id: schema.nodes.id })
     .from(schema.nodes)
-    .where(eq(schema.nodes.id, 'quezon-city'))
+    .where(eq(schema.nodes.id, targetCityId))
     .get();
 
-  if (!qcExists) {
+  if (!cityExists) {
     await db.insert(schema.nodes).values({
-      id: 'quezon-city',
+      id: targetCityId,
       type: 'location',
-      name: 'Quezon City',
-      description: 'Quezon City, the largest city in Metro Manila, Philippines.',
-      metadata: JSON.stringify({ region: 'NCR', district_count: 6, barangay_count: 142 }),
+      name: targetCityName,
+      description: targetCityId === 'quezon-city'
+        ? 'Quezon City, the largest city in Metro Manila, Philippines.'
+        : `${targetCityName} — policy data scraped for cross-city analysis.`,
+      metadata: JSON.stringify(targetCityId === 'quezon-city'
+        ? { region: 'NCR', district_count: 6, barangay_count: 142 }
+        : { level: 'city' }),
       source_doc_id: null,
     }).onConflictDoNothing();
   }
+
+  // Build a name lookup for descriptive metadata
+  const nodeNameMap = new Map<string, string>();
+  for (const node of nodes) nodeNameMap.set(node.id, (node as { name?: string }).name ?? node.id);
 
   // Helper to create an edge if it doesn't already exist
   async function ensureEdge(sourceId: string, targetId: string, relationship: string) {
@@ -406,25 +439,197 @@ export async function enrichLocationEdges(
       .get();
 
     if (!existing) {
+      const srcName = nodeNameMap.get(sourceId) ?? sourceId;
+      const tgtName = nodeNameMap.get(targetId) ?? targetId;
+      let detail: string;
+      switch (relationship) {
+        case 'located_in': detail = `${srcName} is a location within ${tgtName}`; break;
+        case 'enacted_in': detail = `${srcName} is enacted in ${tgtName}`; break;
+        default: detail = `${srcName} is related to ${tgtName}`; break;
+      }
+
       await db.insert(schema.edges).values({
         source_id: sourceId,
         target_id: targetId,
         relationship: relationship as typeof schema.edges.$inferInsert['relationship'],
-        metadata: JSON.stringify({ detail: 'Auto-enriched during ingestion' }),
+        metadata: JSON.stringify({ detail }),
       });
       newEdges.push({ source_id: sourceId, target_id: targetId, relationship });
     }
   }
 
-  // Connect ALL locations (not just prefix-matched) to quezon-city
+  // Connect ALL locations and policies to the target city
   for (const node of nodes) {
-    if (node.type === 'location' && node.id !== 'quezon-city') {
-      await ensureEdge(node.id, 'quezon-city', 'located_in');
+    if (node.type === 'location' && node.id !== targetCityId) {
+      await ensureEdge(node.id, targetCityId, 'located_in');
     }
     if (node.type === 'policy') {
-      await ensureEdge(node.id, 'quezon-city', 'enacted_in');
+      await ensureEdge(node.id, targetCityId, 'enacted_in');
     }
   }
 
   return newEdges;
+}
+
+// ── Post-ingest orphan fixing ───────────────────────────────────────
+
+/**
+ * Fix orphan nodes created during this ingest. Nodes from the given document
+ * that have zero edges are connected to a policy from the same document using
+ * a type-appropriate relationship. Mirrors backfill Phase 5 but runs per-document.
+ */
+export async function fixOrphanNodes(
+  env: Env,
+  docId: string,
+  extractedNodes: Array<{ id: string; type: string; name?: string }>,
+): Promise<number> {
+  const db = getDb(env);
+
+  // Find nodes from this doc that have 0 edges
+  const nodeIds = extractedNodes.map((n) => n.id);
+  if (nodeIds.length === 0) return 0;
+
+  const edgeCounts = await db.all<{ node_id: string; cnt: number }>(sql`
+    SELECT node_id, COUNT(*) as cnt FROM (
+      SELECT source_id as node_id FROM edges WHERE source_id IN (${sql.join(nodeIds.map(id => sql`${id}`), sql`, `)})
+      UNION ALL
+      SELECT target_id as node_id FROM edges WHERE target_id IN (${sql.join(nodeIds.map(id => sql`${id}`), sql`, `)})
+    ) GROUP BY node_id
+  `);
+  const edgeCountMap = new Map(edgeCounts.map((r) => [r.node_id, r.cnt]));
+
+  const orphans = extractedNodes.filter(
+    (n) => !edgeCountMap.has(n.id) && n.id !== 'quezon-city'
+  );
+
+  if (orphans.length === 0) return 0;
+
+  // Find policies from same document to connect orphans to
+  const docPolicies = extractedNodes.filter((n) => n.type === 'policy');
+
+  let fixed = 0;
+  for (const orphan of orphans) {
+    if (docPolicies.length > 0) {
+      const rel = orphan.type === 'stakeholder' ? 'affected'
+        : orphan.type === 'outcome' ? 'resulted_in'
+        : orphan.type === 'metric' ? 'measured_by'
+        : orphan.type === 'location' ? 'enacted_in'
+        : 'related_to';
+
+      const policyId = docPolicies[0].id;
+      const policyName = docPolicies[0].name ?? policyId;
+      const orphanName = orphan.name ?? orphan.id;
+
+      const detailMap: Record<string, string> = {
+        affected: `${policyName} impacts ${orphanName}`,
+        resulted_in: `${policyName} produced this outcome`,
+        measured_by: `Quantitative indicator for ${policyName}`,
+        enacted_in: `${policyName} is implemented in ${orphanName}`,
+        related_to: `Connected to ${policyName} from the same policy document`,
+      };
+
+      await db.insert(schema.edges).values({
+        source_id: policyId,
+        target_id: orphan.id,
+        relationship: rel as typeof schema.edges.$inferInsert['relationship'],
+        metadata: JSON.stringify({ detail: detailMap[rel] ?? `${policyName} relates to ${orphanName}` }),
+      });
+    } else {
+      // No policy in this doc — connect to quezon-city
+      await db.insert(schema.edges).values({
+        source_id: orphan.id,
+        target_id: 'quezon-city',
+        relationship: 'related_to',
+        metadata: JSON.stringify({ detail: `${orphan.name ?? orphan.id} is related to Quezon City governance` }),
+      });
+    }
+    fixed++;
+  }
+
+  if (fixed > 0) {
+    console.log(`[fixOrphanNodes] Connected ${fixed} orphan node(s) from doc ${docId}`);
+  }
+  return fixed;
+}
+
+// ── Post-ingest cross-linking ───────────────────────────────────────
+
+const CROSS_LINK_THRESHOLD = 0.82;
+const CROSSLINK_TYPES = new Set(['stakeholder', 'outcome', 'event', 'metric']);
+
+/**
+ * Cross-link newly ingested nodes with similar existing nodes across documents.
+ * Uses the embedding cache from resolveEntities() to avoid re-computing embeddings.
+ * Mirrors backfill Phase 7 but runs per-document at ingest time.
+ */
+export async function crossLinkNewNodes(
+  env: Env,
+  extractedNodes: Array<{ id: string; type: string; name?: string }>,
+  embeddingCache: Map<string, number[]>,
+): Promise<number> {
+  const db = getDb(env);
+  const candidates = extractedNodes.filter((n) => CROSSLINK_TYPES.has(n.type));
+  if (candidates.length === 0) return 0;
+
+  // Build set of existing edges to avoid duplicates
+  const candidateIds = candidates.map((n) => n.id);
+  const existingEdges = await db
+    .select({ source_id: schema.edges.source_id, target_id: schema.edges.target_id })
+    .from(schema.edges)
+    .where(sql`${schema.edges.source_id} IN (${sql.join(candidateIds.map(id => sql`${id}`), sql`, `)})
+      OR ${schema.edges.target_id} IN (${sql.join(candidateIds.map(id => sql`${id}`), sql`, `)})`)
+    .all();
+
+  const existingPairs = new Set<string>();
+  for (const e of existingEdges) {
+    existingPairs.add(`${e.source_id}|${e.target_id}`);
+    existingPairs.add(`${e.target_id}|${e.source_id}`);
+  }
+
+  // Fetch names for edge metadata
+  const allNodes = await db
+    .select({ id: schema.nodes.id, name: schema.nodes.name })
+    .from(schema.nodes)
+    .all();
+  const nameMap = new Map(allNodes.map((n) => [n.id, n.name]));
+
+  let crossLinksCreated = 0;
+  for (const node of candidates) {
+    const embedding = embeddingCache.get(node.id);
+    if (!embedding) continue;
+
+    const results = await env.VECTOR_INDEX.query(embedding, {
+      topK: 5,
+      returnMetadata: 'all',
+    });
+
+    for (const match of results.matches) {
+      if (match.score < CROSS_LINK_THRESHOLD) continue;
+      if (match.id === node.id) continue;
+      const matchType = (match.metadata as Record<string, string> | null)?.type;
+      if (matchType !== node.type) continue;
+      if (existingPairs.has(`${node.id}|${match.id}`)) continue;
+
+      const matchName = nameMap.get(match.id) ?? match.id;
+      await db.insert(schema.edges).values({
+        source_id: node.id,
+        target_id: match.id,
+        relationship: 'related_to',
+        weight: match.score,
+        metadata: JSON.stringify({
+          detail: `${node.name ?? node.id} and ${matchName} are semantically related (similarity ${match.score.toFixed(2)})`,
+          similarity: match.score,
+          cross_link: true,
+        }),
+      });
+      existingPairs.add(`${node.id}|${match.id}`);
+      existingPairs.add(`${match.id}|${node.id}`);
+      crossLinksCreated++;
+    }
+  }
+
+  if (crossLinksCreated > 0) {
+    console.log(`[crossLinkNewNodes] Created ${crossLinksCreated} cross-document link(s)`);
+  }
+  return crossLinksCreated;
 }

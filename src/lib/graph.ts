@@ -145,3 +145,114 @@ export async function queryGraph(
     context_text: contextParts.join('\n'),
   };
 }
+
+// ── Transferability Chain ───────────────────────────────────────────────────
+
+export interface TransferabilityChain {
+  path: Array<{ id: string; name: string }>;
+  edges: Array<{ source: string; target: string; weight: number; basis: string }>;
+  score: number; // Product of weights along the path (0-1)
+}
+
+/**
+ * Find the highest-weight proximity chain path from a source city to Quezon City.
+ * Uses BFS over proximity_chain edges, tracking the best (highest product-of-weights) path.
+ */
+export async function findTransferabilityChain(
+  env: Env,
+  fromCityId: string,
+  toCityId: string = 'quezon-city',
+): Promise<TransferabilityChain | null> {
+  if (fromCityId === toCityId) {
+    return { path: [{ id: toCityId, name: 'Quezon City' }], edges: [], score: 1.0 };
+  }
+
+  // Fetch all proximity_chain edges
+  const chainEdges = await env.DB.prepare(`
+    SELECT source_id, target_id, weight, metadata
+    FROM edges WHERE relationship = 'proximity_chain'
+  `).all<{ source_id: string; target_id: string; weight: number; metadata: string | null }>();
+
+  // Build adjacency list (bidirectional)
+  const adj = new Map<string, Array<{ neighbor: string; weight: number; basis: string }>>();
+  for (const edge of chainEdges.results) {
+    let basis = '';
+    try { basis = JSON.parse(edge.metadata ?? '{}').basis ?? ''; } catch {}
+
+    if (!adj.has(edge.source_id)) adj.set(edge.source_id, []);
+    if (!adj.has(edge.target_id)) adj.set(edge.target_id, []);
+    adj.get(edge.source_id)!.push({ neighbor: edge.target_id, weight: edge.weight, basis });
+    adj.get(edge.target_id)!.push({ neighbor: edge.source_id, weight: edge.weight, basis });
+  }
+
+  // BFS with best-score tracking (maximize product of weights)
+  interface QueueItem {
+    nodeId: string;
+    path: string[];
+    edgeWeights: Array<{ source: string; target: string; weight: number; basis: string }>;
+    score: number;
+  }
+
+  const queue: QueueItem[] = [{
+    nodeId: fromCityId,
+    path: [fromCityId],
+    edgeWeights: [],
+    score: 1.0,
+  }];
+
+  const bestScore = new Map<string, number>();
+  bestScore.set(fromCityId, 1.0);
+
+  let bestChain: QueueItem | null = null;
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    if (current.nodeId === toCityId) {
+      if (!bestChain || current.score > bestChain.score) {
+        bestChain = current;
+      }
+      continue;
+    }
+
+    const neighbors = adj.get(current.nodeId) ?? [];
+    for (const { neighbor, weight, basis } of neighbors) {
+      if (current.path.includes(neighbor)) continue; // No cycles
+
+      const newScore = current.score * weight;
+      const prevBest = bestScore.get(neighbor) ?? 0;
+      if (newScore <= prevBest) continue; // Already found a better path
+
+      bestScore.set(neighbor, newScore);
+      queue.push({
+        nodeId: neighbor,
+        path: [...current.path, neighbor],
+        edgeWeights: [...current.edgeWeights, {
+          source: current.nodeId,
+          target: neighbor,
+          weight,
+          basis,
+        }],
+        score: newScore,
+      });
+    }
+  }
+
+  if (!bestChain) return null;
+
+  // Fetch node names for the path
+  const db = getDb(env);
+  const pathNodes = await db
+    .select({ id: schema.nodes.id, name: schema.nodes.name })
+    .from(schema.nodes)
+    .where(inArray(schema.nodes.id, bestChain.path))
+    .all();
+
+  const nameMap = new Map(pathNodes.map((n) => [n.id, n.name]));
+
+  return {
+    path: bestChain.path.map((id) => ({ id, name: nameMap.get(id) ?? id })),
+    edges: bestChain.edgeWeights,
+    score: bestChain.score,
+  };
+}

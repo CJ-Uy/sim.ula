@@ -188,9 +188,11 @@ export async function verifyWithDeBERTa(
 export async function runResearch(
   env: Env,
   query: string,
-  location?: string
+  location?: string,
+  city?: string,
 ): Promise<ResearchResult> {
-  const fullQuery = location ? `${query} ${location} Quezon City Philippines` : `${query} Quezon City Philippines`;
+  const cityContext = city ?? 'Quezon City Philippines';
+  const fullQuery = location ? `${query} ${location} ${cityContext}` : `${query} ${cityContext}`;
 
   // Check KV cache first (24h TTL — same query = same research)
   const cacheKey = `research:${fullQuery.toLowerCase().trim()}`;

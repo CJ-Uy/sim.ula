@@ -8,9 +8,10 @@ import SimulationLoading from "@/components/SimulationLoading";
 import SimulationResults from "@/components/SimulationResults";
 import IngestForm from "@/components/IngestForm";
 import DocumentDashboard from "@/components/DocumentDashboard";
+import ScrapePanel from "@/components/ScrapePanel";
 import type { SimulationResult } from "@/lib/types";
 
-type Screen = "input" | "loading" | "results" | "ingest" | "docs";
+type Screen = "input" | "loading" | "results" | "ingest" | "docs" | "scrape";
 
 const INITIAL_FORM: PolicyFormData = {
   policyType: "",
@@ -26,11 +27,13 @@ function Header({
   minimal,
   onAddData,
   onViewDocs,
+  onScrape,
   screen,
 }: {
   minimal?: boolean;
   onAddData: () => void;
   onViewDocs: () => void;
+  onScrape: () => void;
   screen: Screen;
 }) {
   return (
@@ -47,7 +50,7 @@ function Header({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {screen !== "docs" && screen !== "ingest" && (
+          {screen !== "docs" && screen !== "ingest" && screen !== "scrape" && (
             <button
               onClick={onViewDocs}
               className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
@@ -55,7 +58,15 @@ function Header({
               Knowledge Base
             </button>
           )}
-          {screen !== "ingest" && screen !== "docs" && (
+          {screen !== "scrape" && screen !== "ingest" && screen !== "docs" && (
+            <button
+              onClick={onScrape}
+              className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+            >
+              Scrape
+            </button>
+          )}
+          {screen !== "ingest" && screen !== "docs" && screen !== "scrape" && (
             <button
               onClick={onAddData}
               className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
@@ -131,6 +142,7 @@ export default function Home() {
         minimal={screen === "loading"}
         onAddData={() => setScreen("ingest")}
         onViewDocs={() => setScreen("docs")}
+        onScrape={() => setScreen("scrape")}
         screen={screen}
       />
 
@@ -184,6 +196,12 @@ export default function Home() {
       {screen === "docs" && (
         <main className="min-h-0 flex-1 overflow-hidden">
           <DocumentDashboard onBack={() => setScreen("input")} />
+        </main>
+      )}
+
+      {screen === "scrape" && (
+        <main className="min-h-0 flex-1 overflow-hidden">
+          <ScrapePanel onBack={() => setScreen("input")} />
         </main>
       )}
     </div>

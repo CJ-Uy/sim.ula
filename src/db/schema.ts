@@ -45,6 +45,8 @@ export const edges = sqliteTable(
         'located_in',
         'preceded',
         'related_to',
+        'similar_policy',
+        'proximity_chain',
       ],
     }).notNull(),
     weight: real('weight').default(1.0),
@@ -113,6 +115,34 @@ export const weatherCache = sqliteTable(
   ]
 );
 
+// ── Scrape Jobs ─────────────────────────────────────────────────────────────
+// Tracks automated policy scraping progress across cities and topics
+
+export const scrapeJobs = sqliteTable(
+  'scrape_jobs',
+  {
+    id: text('id').primaryKey(),
+    city_node_id: text('city_node_id').notNull(),
+    topic: text('topic').notNull(),
+    ring: integer('ring').notNull(),
+    status: text('status', {
+      enum: ['pending', 'searching', 'extracting', 'done', 'failed', 'stopped'],
+    }).notNull(),
+    search_query: text('search_query'),
+    results_found: integer('results_found').default(0),
+    policies_ingested: integer('policies_ingested').default(0),
+    error: text('error'),
+    started_at: text('started_at'),
+    completed_at: text('completed_at'),
+    created_at: text('created_at').default(sql`(datetime('now'))`),
+  },
+  (t) => [
+    index('idx_scrape_status').on(t.status),
+    index('idx_scrape_city').on(t.city_node_id),
+    index('idx_scrape_ring').on(t.ring),
+  ]
+);
+
 // ── Type exports (inferred from schema) ──────────────────────────────────────
 export type Node = typeof nodes.$inferSelect;
 export type NewNode = typeof nodes.$inferInsert;
@@ -124,3 +154,5 @@ export type Simulation = typeof simulations.$inferSelect;
 export type NewSimulation = typeof simulations.$inferInsert;
 export type WeatherCacheRow = typeof weatherCache.$inferSelect;
 export type NewWeatherCacheRow = typeof weatherCache.$inferInsert;
+export type ScrapeJob = typeof scrapeJobs.$inferSelect;
+export type NewScrapeJob = typeof scrapeJobs.$inferInsert;
