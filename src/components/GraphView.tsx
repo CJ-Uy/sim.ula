@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import type { GraphNode, GraphEdge, GraphAPIResponse } from "@/lib/types";
 
-// ── Color palettes ────────────────────────────────────────────────────────────
+// ── Color palettes (neural-network aesthetic) ────────────────────────────────
+
+const BG_COLOR = "#fafaf9";
 
 const NODE_COLORS: Record<GraphNode["type"], string> = {
   policy:      "#0d9488",
@@ -15,18 +17,16 @@ const NODE_COLORS: Record<GraphNode["type"], string> = {
   metric:      "#db2777",
 };
 
-const RELATIONSHIP_COLORS: Record<string, string> = {
-  conflicted_with: "#ef4444",
-  opposed_by:      "#ef4444",
-  supported_by:    "#16a34a",
-  resulted_in:     "#16a34a",
-  enacted_in:      "#2563eb",
-  located_in:      "#2563eb",
-  preceded:        "#7c3aed",
-  measured_by:     "#db2777",
-  affected:        "#78716c",
-  related_to:      "#78716c",
+const NODE_GLOW: Record<GraphNode["type"], string> = {
+  policy:      "rgba(13,148,136,0.15)",
+  location:    "rgba(37,99,235,0.15)",
+  stakeholder: "rgba(217,119,6,0.15)",
+  outcome:     "rgba(22,163,74,0.15)",
+  event:       "rgba(124,58,237,0.15)",
+  metric:      "rgba(219,39,119,0.15)",
 };
+
+const LINK_COLOR = "rgba(168,162,158,0.25)";
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ function NodeCard({
   try { if (node.metadata) meta = JSON.parse(node.metadata); } catch { /* ignore */ }
 
   return (
-    <aside className="absolute bottom-4 right-4 w-72 rounded-lg border border-border bg-surface shadow-lg overflow-hidden z-10">
+    <aside className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-72 rounded-lg border border-border bg-surface shadow-lg overflow-hidden z-10">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
         <div className="flex items-center gap-2">
           <span
@@ -70,12 +70,12 @@ function NodeCard({
         </div>
         <button
           onClick={onClose}
-          className="text-xs text-muted hover:text-foreground transition-colors leading-none"
+          className="text-xs text-muted hover:text-foreground transition-colors leading-none p-1"
         >
           ✕
         </button>
       </div>
-      <div className="px-4 py-4 space-y-3 max-h-80 overflow-y-auto">
+      <div className="px-4 py-4 space-y-3 max-h-60 sm:max-h-80 overflow-y-auto">
         <h3 className="font-serif font-semibold text-foreground text-sm leading-snug">
           {node.name}
         </h3>
@@ -121,13 +121,13 @@ function EdgeCard({
   targetName: string;
   onClose: () => void;
 }) {
-  const color = RELATIONSHIP_COLORS[edge.relationship] ?? "#78716c";
+  const color = NODE_COLORS[("policy" as GraphNode["type"])] ?? "#94a3b8";
   const weight = edge.weight ?? 1;
   let meta: Record<string, unknown> = {};
   try { if (edge.metadata) meta = JSON.parse(edge.metadata); } catch { /* ignore */ }
 
   return (
-    <aside className="absolute bottom-4 right-4 w-72 rounded-lg border border-border bg-surface shadow-lg overflow-hidden z-10">
+    <aside className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-72 rounded-lg border border-border bg-surface shadow-lg overflow-hidden z-10">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
         <div className="flex items-center gap-2">
           <span
@@ -140,7 +140,7 @@ function EdgeCard({
         </div>
         <button
           onClick={onClose}
-          className="text-xs text-muted hover:text-foreground transition-colors leading-none"
+          className="text-xs text-muted hover:text-foreground transition-colors leading-none p-1"
         >
           ✕
         </button>
@@ -186,18 +186,18 @@ function EdgeCard({
 function GraphLegend() {
   const entries = Object.entries(NODE_COLORS) as [GraphNode["type"], string][];
   return (
-    <div className="absolute bottom-4 left-4 rounded-lg border border-border bg-surface/90 backdrop-blur-sm px-3 py-2.5 z-10">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-light mb-2">
+    <div className="absolute top-3 left-3 sm:bottom-4 sm:left-4 sm:top-auto border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-2 sm:px-3 sm:py-2.5 z-10">
+      <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-light mb-1.5 sm:mb-2">
         Node Types
       </p>
-      <ul className="space-y-1">
+      <ul className="flex flex-wrap gap-x-3 gap-y-0.5 sm:block sm:space-y-1">
         {entries.map(([type, color]) => (
-          <li key={type} className="flex items-center gap-2">
+          <li key={type} className="flex items-center gap-1.5 sm:gap-2">
             <span
-              className="inline-block h-2 w-2 rounded-full shrink-0"
+              className="inline-block h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full shrink-0"
               style={{ backgroundColor: color }}
             />
-            <span className="text-xs text-foreground capitalize">{type}</span>
+            <span className="text-[10px] sm:text-xs text-foreground capitalize">{type}</span>
           </li>
         ))}
       </ul>
@@ -228,6 +228,7 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
+  const [showLabels, setShowLabels] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
 
@@ -297,56 +298,83 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     setSelection({ kind: "edge", data: l as GraphEdge, sourceName, targetName });
   }, [nodeById]);
 
-  // Canvas node painter — filled circle + soft shadow + label
+  // Canvas node painter — small glowing dot with togglable label
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const n = node as FGNode & GraphNode;
     const color = NODE_COLORS[n.type] ?? "#78716c";
+    const glow = NODE_GLOW[n.type] ?? "rgba(120,113,108,0.15)";
     const isSelected = selection?.kind === "node" && selection.data.id === n.id;
-    const r = isSelected ? 7 : 5;
+    const x = n.x ?? 0;
+    const y = n.y ?? 0;
+    const r = isSelected ? 3.5 : 2.5;
 
+    // Outer glow
     ctx.save();
-    ctx.shadowColor = color;
-    ctx.shadowBlur = isSelected ? 12 : 6;
+    const grad = ctx.createRadialGradient(x, y, r, x, y, r * 4);
+    grad.addColorStop(0, glow);
+    grad.addColorStop(1, "rgba(250,250,249,0)");
+    ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
+    ctx.arc(x, y, r * 4, 0, 2 * Math.PI);
     ctx.fill();
     ctx.restore();
 
+    // Core dot
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Selection ring
     if (isSelected) {
       ctx.beginPath();
-      ctx.arc(n.x ?? 0, n.y ?? 0, r + 2, 0, 2 * Math.PI);
+      ctx.arc(x, y, r + 2, 0, 2 * Math.PI);
       ctx.strokeStyle = "#1c1917";
-      ctx.lineWidth = 1.5 / globalScale;
+      ctx.lineWidth = 1 / globalScale;
       ctx.stroke();
     }
 
-    // Label — always show at default zoom, full name at zoom > 1.5
-    const label = globalScale >= 1.5 ? n.name : n.name.slice(0, 14) + (n.name.length > 14 ? "…" : "");
-    const fontSize = Math.max(10 / globalScale, 3);
-    ctx.font = `${fontSize}px sans-serif`;
-    ctx.fillStyle = "#1c1917";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillText(label, n.x ?? 0, (n.y ?? 0) + r + 2 / globalScale);
-  }, [selection]);
+    // Label
+    if (showLabels) {
+      const fontSize = Math.min(Math.max(11 / globalScale, 2.5), 5);
+      const label = n.name.length > 20 && globalScale < 2
+        ? n.name.slice(0, 18) + "…"
+        : n.name;
+      ctx.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+
+      const textY = y + r + 3 / globalScale;
+      const textWidth = ctx.measureText(label).width;
+      const padX = 2 / globalScale;
+      const padY = 1 / globalScale;
+
+      // Background pill
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillRect(
+        x - textWidth / 2 - padX,
+        textY - padY,
+        textWidth + padX * 2,
+        fontSize + padY * 2
+      );
+
+      // Text
+      ctx.fillStyle = "#1c1917";
+      ctx.fillText(label, x, textY);
+    }
+  }, [selection, showLabels]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodePointerAreaPaint = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
     const n = node as FGNode;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(n.x ?? 0, n.y ?? 0, 8, 0, 2 * Math.PI);
+    ctx.arc(n.x ?? 0, n.y ?? 0, 6, 0, 2 * Math.PI);
     ctx.fill();
   }, []);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const linkColorFn = useCallback((link: any) => {
-    const rel = (link as FGLink).relationship;
-    const base = RELATIONSHIP_COLORS[rel] ?? "#78716c";
-    return base + "88"; // 53% opacity
-  }, []);
+  const linkColorFn = useCallback(() => LINK_COLOR, []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linkWidthFn = useCallback((link: any) => {
@@ -387,7 +415,7 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
           )}
 
           <ForceGraph2D
-            backgroundColor="#fafaf9"
+            backgroundColor={BG_COLOR}
             width={dimensions.width}
             height={dimensions.height}
             graphData={fgData}
@@ -395,8 +423,7 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
             nodePointerAreaPaint={nodePointerAreaPaint}
             linkColor={linkColorFn}
             linkWidth={linkWidthFn}
-            linkDirectionalArrowLength={4}
-            linkDirectionalArrowRelPos={1}
+            linkDirectionalArrowLength={0}
             onNodeClick={handleNodeClick}
             onLinkClick={handleLinkClick}
             onBackgroundClick={() => setSelection(null)}
@@ -407,6 +434,14 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
           />
 
           <GraphLegend />
+
+          {/* Label toggle */}
+          <button
+            onClick={() => setShowLabels((v) => !v)}
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs text-muted hover:text-foreground active:text-foreground transition-colors"
+          >
+            {showLabels ? "Hide Labels" : "Show Labels"}
+          </button>
 
           {selection?.kind === "node" && (
             <NodeCard

@@ -7,7 +7,7 @@ import { getEnv } from '@/lib/env';
 import { getCachedWeather } from '@/lib/weather';
 import type { FeatureCollection, Point } from 'geojson';
 
-const MAX_POINTS = 300;
+const MAX_POINTS = 120;
 
 function generateGrid(
   north: number,
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   }
 
   const env = await getEnv();
-  const step = type === 'heat' ? 0.01 : type === 'aqi' ? 0.015 : 0.02;
+  const step = type === 'heat' ? 0.03 : type === 'aqi' ? 0.04 : 0.05;
   const points = generateGrid(north, south, east, west, step);
 
   // Compute effective step (same logic as generateGrid) so client can size cells

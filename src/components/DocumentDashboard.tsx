@@ -259,25 +259,25 @@ export default function DocumentDashboard({ onBack }: DocumentDashboardProps) {
   return (
     <div className="flex h-full flex-col" style={{ animation: "fade-in 300ms ease" }}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border-light bg-surface px-6 py-4">
-        <div>
-          <h2 className="font-serif text-lg font-semibold text-foreground">Knowledge Base</h2>
-          <p className="text-xs text-muted">
-            {loading ? "Loading…" : `${docs.length} document${docs.length !== 1 ? "s" : ""} ingested`}
+      <div className="flex items-center justify-between border-b border-border-light bg-surface px-4 py-3 sm:px-6 sm:py-4">
+        <div className="min-w-0">
+          <h2 className="font-serif text-base sm:text-lg font-semibold text-foreground truncate">Knowledge Base</h2>
+          <p className="text-[11px] sm:text-xs text-muted">
+            {loading ? "Loading…" : `${docs.length} doc${docs.length !== 1 ? "s" : ""}`}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             onClick={fetchDocs}
             disabled={loading}
-            className="text-xs text-muted hover:text-foreground transition-colors disabled:opacity-40"
+            className="text-[11px] sm:text-xs text-muted hover:text-foreground transition-colors disabled:opacity-40"
           >
             ↺ Refresh
           </button>
           <button
             onClick={onBack}
-            className="text-sm text-muted hover:text-foreground transition-colors"
+            className="text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
           >
             ← Back
           </button>
@@ -287,12 +287,12 @@ export default function DocumentDashboard({ onBack }: DocumentDashboardProps) {
       {/* Body — single scrollable page: graph on top, documents below */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Graph section */}
-        <div className="h-[50vh] min-h-[400px] border-b border-border-light">
+        <div className="h-[50vh] sm:h-[70vh] min-h-72 sm:min-h-125 border-b border-border-light">
           <GraphView docs={docs} />
         </div>
 
         {/* Documents section */}
-        <div className="px-6 py-6">
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
           <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-wide text-foreground/70">
             Documents
           </h3>

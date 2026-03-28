@@ -133,8 +133,11 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
   // Debounced fetch timer
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch live vulnerability data for current map bounds
-  const fetchLayers = useCallback(async () => {
+  // Cache last fetched bounds to skip refetches on small pans
+  const lastBoundsRef = useRef<{ north: number; south: number; east: number; west: number } | null>(null);
+
+  // Fetch live vulnerability data for current map bounds (only enabled layers)
+  const fetchLayers = useCallback(async (force = false) => {
     const map = mapRef.current;
     if (!map) return;
 
@@ -146,26 +149,46 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
       west: bounds.getWest(),
     };
 
+    // Skip refetch if new bounds are mostly within the last fetched bounds
+    const prev = lastBoundsRef.current;
+    if (!force && prev) {
+      const margin = 0.005; // ~500m tolerance
+      if (
+        boundsObj.north <= prev.north + margin &&
+        boundsObj.south >= prev.south - margin &&
+        boundsObj.east <= prev.east + margin &&
+        boundsObj.west >= prev.west - margin
+      ) {
+        return;
+      }
+    }
+
+    lastBoundsRef.current = boundsObj;
     setIsLoading(true);
 
     try {
-      const [heat, aqi, flood] = await Promise.all([
-        fetchHeatGrid(boundsObj).catch(() => EMPTY_GRID),
-        fetchAqiGrid(boundsObj).catch(() => EMPTY_GRID),
-        fetchFloodGrid(boundsObj).catch(() => EMPTY_GRID),
-      ]);
-      setHeatData(heat);
-      setAqiData(aqi);
-      setFloodData(flood);
+      const promises: Promise<void>[] = [];
+
+      if (activeLayers.has("heat")) {
+        promises.push(fetchHeatGrid(boundsObj).catch(() => EMPTY_GRID).then(setHeatData));
+      }
+      if (activeLayers.has("aqi")) {
+        promises.push(fetchAqiGrid(boundsObj).catch(() => EMPTY_GRID).then(setAqiData));
+      }
+      if (activeLayers.has("flood")) {
+        promises.push(fetchFloodGrid(boundsObj).catch(() => EMPTY_GRID).then(setFloodData));
+      }
+
+      await Promise.all(promises);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeLayers]);
 
   // Debounced version for map move events
   const debouncedFetch = useCallback(() => {
     if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
-    fetchTimerRef.current = setTimeout(fetchLayers, 800);
+    fetchTimerRef.current = setTimeout(fetchLayers, 1500);
   }, [fetchLayers]);
 
   // Center map on user's location
@@ -201,7 +224,7 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
   }, []);
 
   const handleMapLoad = useCallback(() => {
-    fetchLayers();
+    fetchLayers(true);
   }, [fetchLayers]);
 
   const handleMoveEnd = useCallback(
@@ -217,6 +240,28 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
 
       setMarkerPos({ lng, lat });
       setClickPopup(null);
+
+      // On touch/mobile, show layer data tooltip (since hover doesn't work)
+      if (e.features && e.features.length > 0) {
+        const parts: string[] = [];
+        for (const f of e.features) {
+          const p = f.properties;
+          if (!p) continue;
+          if (f.layer.id === "heat-fill" && p.apparentTemperature != null) {
+            const temp = typeof p.apparentTemperature === "string" ? parseFloat(p.apparentTemperature) : p.apparentTemperature;
+            parts.push(`<strong>Heat Index</strong><br/>Feels like: <span style="color:${getHeatColor(temp)};font-weight:600;">${temp}°C</span>`);
+          } else if (f.layer.id === "aqi-fill" && p.usAqi != null) {
+            const aqi = typeof p.usAqi === "string" ? parseInt(p.usAqi) : p.usAqi;
+            parts.push(`<strong>Air Quality</strong><br/>AQI: <span style="color:${getAqiColor(aqi)};font-weight:600;">${aqi} (${getAqiLabel(aqi)})</span>`);
+          } else if (f.layer.id === "flood-fill" && p.riverDischarge != null) {
+            const discharge = typeof p.riverDischarge === "string" ? parseFloat(p.riverDischarge) : p.riverDischarge;
+            parts.push(`<strong>Flood</strong><br/>Flow: <span style="color:#3b82f6;font-weight:600;">${discharge.toFixed(1)} m³/s</span>`);
+          }
+        }
+        if (parts.length) {
+          setHoverInfo({ lng, lat, html: parts.join('<hr style="margin:4px 0;border:0;border-top:1px solid #e5e5e5"/>') });
+        }
+      }
 
       // Reverse geocode
       let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
@@ -484,33 +529,33 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
         )}
       </Map>
 
-      {/* Layer toggle control */}
-      <div className="absolute top-3 left-3 z-10 border border-border bg-surface p-3">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/60">
-          Vulnerability Layers
+      {/* Layer toggle control — compact on mobile */}
+      <div className="absolute top-3 left-3 z-10 border border-border bg-surface p-2 sm:p-3">
+        <p className="mb-1.5 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-foreground/60">
+          Layers
         </p>
-        <div className="space-y-1.5">
+        <div className="flex gap-2 sm:block sm:space-y-1.5">
           {LAYERS_CONFIG.map((layer) => (
             <label
               key={layer.id}
-              className="flex cursor-pointer items-center gap-2 text-[13px]"
+              className="flex cursor-pointer items-center gap-1.5 sm:gap-2 text-[11px] sm:text-[13px]"
             >
               <input
                 type="checkbox"
                 checked={activeLayers.has(layer.id)}
                 onChange={() => toggleLayer(layer.id)}
-                className="accent-accent"
+                className="accent-accent h-3 w-3 sm:h-4 sm:w-4"
               />
               <span
-                className="inline-block h-2.5 w-2.5"
+                className="inline-block h-2 w-2 sm:h-2.5 sm:w-2.5"
                 style={{ backgroundColor: layer.color }}
               />
-              <span>{layer.label}</span>
+              <span className="hidden sm:inline">{layer.label}</span>
             </label>
           ))}
         </div>
         {isLoading && (
-          <p className="mt-2 text-[10px] text-muted-light">Loading data...</p>
+          <p className="mt-1.5 text-[10px] text-muted-light">Loading...</p>
         )}
       </div>
     </div>
