@@ -3,8 +3,6 @@ import { getEnv } from '@/lib/env';
 import { runSimulation } from '@/lib/simulate';
 import type { SimulateRequest } from '@/lib/types';
 
-export const runtime = 'edge';
-
 export async function POST(request: Request) {
   const env = await getEnv();
   const body = (await request.json()) as SimulateRequest;

@@ -4,8 +4,6 @@ import { callLLM } from '@/lib/llm';
 import { queryGraph } from '@/lib/graph';
 import type { ConsultRequest } from '@/lib/types';
 
-export const runtime = 'edge';
-
 const CONSULT_SYSTEM_PROMPT = `You are Simula's policy consultation engine for Quezon City, Philippines. Given a desired outcome or goal, suggest specific implementable policies based on historical precedents in the knowledge base.
 
 Return ONLY valid JSON (no markdown, no explanation):

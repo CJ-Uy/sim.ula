@@ -7,8 +7,9 @@ import PolicyMap from "@/components/PolicyMap";
 import SimulationLoading from "@/components/SimulationLoading";
 import SimulationResults from "@/components/SimulationResults";
 import IngestForm from "@/components/IngestForm";
+import DocumentDashboard from "@/components/DocumentDashboard";
 
-type Screen = "input" | "loading" | "results" | "ingest";
+type Screen = "input" | "loading" | "results" | "ingest" | "docs";
 
 const INITIAL_FORM: PolicyFormData = {
   policyType: "",
@@ -23,10 +24,12 @@ const INITIAL_FORM: PolicyFormData = {
 function Header({
   minimal,
   onAddData,
+  onViewDocs,
   screen,
 }: {
   minimal?: boolean;
   onAddData: () => void;
+  onViewDocs: () => void;
   screen: Screen;
 }) {
   return (
@@ -42,8 +45,16 @@ function Header({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4">
-          {screen !== "ingest" && (
+        <div className="flex items-center gap-3">
+          {screen !== "docs" && screen !== "ingest" && (
+            <button
+              onClick={onViewDocs}
+              className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+            >
+              Knowledge Base
+            </button>
+          )}
+          {screen !== "ingest" && screen !== "docs" && (
             <button
               onClick={onAddData}
               className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
@@ -109,6 +120,7 @@ export default function Home() {
       <Header
         minimal={screen === "loading"}
         onAddData={() => setScreen("ingest")}
+        onViewDocs={() => setScreen("docs")}
         screen={screen}
       />
 
@@ -150,6 +162,12 @@ export default function Home() {
       {screen === "ingest" && (
         <main className="min-h-0 flex-1 overflow-hidden">
           <IngestForm onBack={() => setScreen("input")} />
+        </main>
+      )}
+
+      {screen === "docs" && (
+        <main className="min-h-0 flex-1 overflow-hidden">
+          <DocumentDashboard onBack={() => setScreen("input")} />
         </main>
       )}
     </div>

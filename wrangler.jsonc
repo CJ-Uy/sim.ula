@@ -3,86 +3,83 @@
  * https://developers.cloudflare.com/workers/wrangler/configuration/
  */
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "simula",
-	"main": ".open-next/worker.js",
-	"compatibility_date": "2025-09-27",
-	"compatibility_flags": [
-		"nodejs_compat",
-		"global_fetch_strictly_public"
-	],
-	"assets": {
-		"binding": "ASSETS",
-		"directory": ".open-next/assets"
-	},
-	"images": {
-		// Enable image optimization
-		// see https://opennext.js.org/cloudflare/howtos/image
-		"binding": "IMAGES"
-	},
-	"services": [
-		{
-			// Self-reference service binding, the service name must match the worker name
-			// see https://opennext.js.org/cloudflare/caching
-			"binding": "WORKER_SELF_REFERENCE",
-			"service": "simula"
-		}
-	],
-	"observability": {
-		"enabled": true
-	},
-	"upload_source_maps": true,
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "simula",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-09-27",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets",
+  },
+  "images": {
+    // Enable image optimization
+    // see https://opennext.js.org/cloudflare/howtos/image
+    "binding": "IMAGES",
+  },
+  "services": [
+    {
+      // Self-reference service binding, the service name must match the worker name
+      // see https://opennext.js.org/cloudflare/caching
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "simula",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+  "upload_source_maps": true,
 
-	// D1 — graph store + weather cache
-	"d1_databases": [
-		{
-			"binding": "DB",
-			"database_name": "simula",
-			"database_id": "c401b2f1-a1d1-4b15-b714-e297ca7d5ddc",
-			"remote": true
-		}
-	],
+  // D1 — graph store + weather cache
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "simula",
+      "database_id": "c401b2f1-a1d1-4b15-b714-e297ca7d5ddc",
+      "remote": true,
+    },
+  ],
 
-	// Vectorize — semantic node search (768-dim, cosine)
-	"vectorize": [
-		{
-			"binding": "VECTOR_INDEX",
-			"index_name": "simula-embeddings",
-			"remote": true
-		}
-	],
+  // Vectorize — semantic node search (768-dim, cosine)
+  "vectorize": [
+    {
+      "binding": "VECTOR_INDEX",
+      "index_name": "simula-embeddings",
+      "remote": true,
+    },
+  ],
 
-	// R2 — raw document storage
-	"r2_buckets": [
-		{
-			"binding": "DOCS_BUCKET",
-			"bucket_name": "simula",
-			"remote": true
-		}
-	],
+  // R2 — raw document storage
+  "r2_buckets": [
+    {
+      "binding": "DOCS_BUCKET",
+      "bucket_name": "simula",
+      "remote": true,
+    },
+  ],
 
-	// KV — weather + simulation result cache
-	"kv_namespaces": [
-		{
-			"binding": "CACHE",
-			"id": "71be366a02e542e4b40970ac44f7383e",
-			"remote": true
-		}
-	],
+  // KV — weather + simulation result cache
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "71be366a02e542e4b40970ac44f7383e",
+      "remote": true,
+    },
+  ],
 
-	// Workers AI — fallback LLM + embeddings when Ollama is unreachable
-	"ai": {
-		"binding": "AI",
-		"remote": true
-	},
+  // Workers AI — fallback LLM + embeddings when Ollama is unreachable
+  "ai": {
+    "binding": "AI",
+    "remote": true,
+  },
 
-	// Service URLs — actual values come from .dev.vars (local) or Pages dashboard (prod)
-	"vars": {
-		"OLLAMA_URL": "",
-		"SEARXNG_URL": "",
-		"DEBERTA_URL": "",
-		"OLLAMA_MODEL": "qwen3:8b",
-		"EMBED_MODEL": "nomic-embed-text",
-		"OLLAMA_TIMEOUT_MS": "30000"
-	}
+  // Service URLs — actual values come from .dev.vars (local) or Pages dashboard (prod)
+  "vars": {
+    "OLLAMA_URL": "https://ollama.cjuy.dev",
+    "SEARXNG_URL": "https://searxng.cjuy.dev",
+    "DEBERTA_URL": "https://deberta.cjuy.dev",
+    "OLLAMA_MODEL": "qwen3:8b",
+    "EMBED_MODEL": "nomic-embed-text",
+    "OLLAMA_TIMEOUT_MS": "30000",
+  },
 }
