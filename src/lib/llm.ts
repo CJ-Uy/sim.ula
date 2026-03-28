@@ -17,10 +17,11 @@ export async function callLLM(
   }
 ): Promise<string> {
   const model = options?.modelOverride ?? env.OLLAMA_MODEL;
-  // phi4:14b needs more time — use 3 min, other models use configured/default 120s
+  // Minimum 120s timeout — phi4 gets 3min, others use env or 120s floor
+  const envTimeout = parseInt(env.OLLAMA_TIMEOUT_MS || '120000');
   const timeoutMs = model.includes('phi4')
     ? 180000
-    : parseInt(env.OLLAMA_TIMEOUT_MS || '120000');
+    : Math.max(envTimeout, 120000);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
