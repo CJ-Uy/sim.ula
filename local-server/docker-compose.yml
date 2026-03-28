@@ -1,5 +1,5 @@
 # =============================================================
-# Schrollar Infrastructure - Docker Compose
+# sim.ula Infrastructure - Docker Compose
 # =============================================================
 # Services:
 #   - SearXNG       → http://localhost:8888  (web search API)
@@ -21,7 +21,7 @@ services:
   # -------------------------------------------------------
   searxng:
     image: searxng/searxng:latest
-    container_name: schrollar-searxng
+    container_name: simula-searxng
     ports:
       - "8888:8080"
     volumes:
@@ -32,7 +32,7 @@ services:
       - SEARXNG_BASE_URL=http://localhost:8888
     restart: unless-stopped
     networks:
-      - schrollar-net
+      - simula-net
 
   # -------------------------------------------------------
   # DeBERTa NLI - Fact grounding/verification API
@@ -43,7 +43,7 @@ services:
     build:
       context: ./deberta-nli
       dockerfile: Dockerfile
-    container_name: schrollar-deberta
+    container_name: simula-deberta
     ports:
       - "8890:8890"
     volumes:
@@ -52,7 +52,7 @@ services:
       - ENTAILMENT_THRESHOLD=0.85
     restart: unless-stopped
     networks:
-      - schrollar-net
+      - simula-net
     # Uncomment below if you have an NVIDIA GPU for faster inference
     # deploy:
     #   resources:
@@ -67,5 +67,5 @@ volumes:
   deberta-model-cache:
 
 networks:
-  schrollar-net:
+  simula-net:
     driver: bridge

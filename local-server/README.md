@@ -1,4 +1,4 @@
-# Schrollar Infrastructure Setup Guide
+# sim.ula Infrastructure Setup Guide
 
 ## SearXNG + DeBERTa NLI on Docker Desktop
 
@@ -13,7 +13,7 @@
 ## Step 1: Start Everything (One Command)
 
 ```bash
-cd schrollar-infra
+cd local-server
 docker compose up -d --build
 ```
 
