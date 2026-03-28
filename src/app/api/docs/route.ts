@@ -1,35 +1,44 @@
 // app/api/docs/route.ts
-import { getEnv } from '@/lib/env';
-import { getDb, schema } from '@/db';
-import { sql } from 'drizzle-orm';
+import { d1Query } from '@/lib/d1-rest';
+
+interface DocRow {
+  id: string;
+  title: string;
+  source_type: string;
+  source_url: string | null;
+  r2_key: string | null;
+  summary: string | null;
+  date_published: string | null;
+  ingested_at: string | null;
+}
+
+interface NodeCount {
+  source_doc_id: string | null;
+  count: number;
+}
 
 export async function GET() {
-  const env = await getEnv();
-  const db = getDb(env);
+  try {
+    const docs = await d1Query<DocRow>(
+      'SELECT id, title, source_type, source_url, r2_key, summary, date_published, ingested_at FROM documents ORDER BY ingested_at DESC'
+    );
 
-  const docs = await db
-    .select()
-    .from(schema.documents)
-    .orderBy(sql`ingested_at DESC`)
-    .all();
+    const nodeCounts = await d1Query<NodeCount>(
+      'SELECT source_doc_id, count(*) as count FROM nodes GROUP BY source_doc_id'
+    );
 
-  const nodeCounts = await db
-    .select({
-      source_doc_id: schema.nodes.source_doc_id,
-      count: sql<number>`count(*)`,
-    })
-    .from(schema.nodes)
-    .groupBy(schema.nodes.source_doc_id)
-    .all();
+    const nodeCountMap = Object.fromEntries(
+      nodeCounts.map((r) => [r.source_doc_id, r.count])
+    );
 
-  const nodeCountMap = Object.fromEntries(
-    nodeCounts.map((r) => [r.source_doc_id, r.count])
-  );
-
-  return Response.json(
-    docs.map((d) => ({
-      ...d,
-      node_count: nodeCountMap[d.id] ?? 0,
-    }))
-  );
+    return Response.json(
+      docs.map((d) => ({
+        ...d,
+        node_count: nodeCountMap[d.id] ?? 0,
+      }))
+    );
+  } catch (err) {
+    console.error('[docs]', err);
+    return Response.json({ error: String(err) }, { status: 500 });
+  }
 }

@@ -23,13 +23,22 @@ export async function POST(request: Request) {
     );
   }
 
-  // Check KV cache
-  const cacheKey = `sim:${body.policy.toLowerCase().trim()}:${body.location.toLowerCase().trim()}`;
-  const cached = await env.CACHE.get(cacheKey);
-  if (cached) {
-    return new Response(cached, {
-      headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
-    });
+  // Check KV cache — hash the policy text to keep key under 512 bytes
+  // KV is best-effort: failures fall through to the live simulation
+  let cacheKey: string | null = null;
+  try {
+    const keySource = `${body.policy.toLowerCase().trim()}:${body.location.toLowerCase().trim()}`;
+    const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(keySource));
+    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    cacheKey = `sim:${hashHex}`;
+    const cached = await env.CACHE.get(cacheKey);
+    if (cached) {
+      return new Response(cached, {
+        headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+      });
+    }
+  } catch {
+    // KV unavailable — proceed without cache
   }
 
   try {
@@ -42,7 +51,13 @@ export async function POST(request: Request) {
     );
 
     const responseBody = JSON.stringify(result);
-    await env.CACHE.put(cacheKey, responseBody, { expirationTtl: 3600 });
+    if (cacheKey) {
+      try {
+        await env.CACHE.put(cacheKey, responseBody, { expirationTtl: 3600 });
+      } catch {
+        // KV write failed — result still returned to client
+      }
+    }
 
     return new Response(responseBody, {
       headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },

@@ -26,6 +26,9 @@ export default function SimulationLoading({
   const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const calledRef = useRef(false);
+  // Stable refs so the effect never re-runs or aborts due to prop reference changes
+  const formDataRef = useRef(formData);
+  const onCompleteRef = useRef(onComplete);
 
   const displayPolicy =
     formData.description.length > 120
@@ -42,12 +45,13 @@ export default function SimulationLoading({
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  // Call the simulation API
+  // Call the simulation API — runs exactly once per mount
   useEffect(() => {
     if (calledRef.current) return;
     calledRef.current = true;
 
-    const controller = new AbortController();
+    const fd = formDataRef.current;
+    const complete = onCompleteRef.current;
 
     (async () => {
       try {
@@ -55,36 +59,27 @@ export default function SimulationLoading({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            policy: formData.description,
-            location: formData.location || "Quezon City",
-            lat: formData.lat,
-            lng: formData.lng,
+            policy: fd.description,
+            location: fd.location || "Quezon City",
+            lat: fd.lat,
+            lng: fd.lng,
           }),
-          signal: controller.signal,
         });
 
         if (!res.ok) {
           const body = await res.json().catch(() => null) as { error?: string } | null;
-          throw new Error(
-            body?.error || `Simulation failed (${res.status})`
-          );
+          throw new Error(body?.error || `Simulation failed (${res.status})`);
         }
 
-        const result = (await res.json()) as SimulationResult & {
-          simulation_id: string;
-        };
+        const result = (await res.json()) as SimulationResult & { simulation_id: string };
 
-        // Jump to final step then complete
         setActiveStep(STEPS.length);
-        setTimeout(() => onComplete(result), 600);
+        setTimeout(() => complete(result), 600);
       } catch (err: unknown) {
-        if ((err as Error).name === "AbortError") return;
         setError((err as Error).message);
       }
     })();
-
-    return () => controller.abort();
-  }, [formData, onComplete]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div

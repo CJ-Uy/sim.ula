@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { PolicyFormData } from "./PolicyInput";
 import type { SimulationResult } from "@/lib/types";
+import PolicyChat from "./PolicyChat";
 
 interface SimulationResultsProps {
   formData: PolicyFormData;
@@ -78,6 +79,23 @@ export default function SimulationResults({
     const t = setTimeout(() => setScoreWidth(afterScore), 100);
     return () => clearTimeout(t);
   }, [afterScore]);
+
+  // Save simulation to DB in the background after results render
+  const savedRef = useRef(false);
+  useEffect(() => {
+    if (savedRef.current) return;
+    savedRef.current = true;
+    fetch("/api/simulate/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        simulation_id: result.simulation_id,
+        policy: formData.description,
+        location: formData.location || "Quezon City",
+        result,
+      }),
+    }).catch(() => {}); // best-effort, don't block UI
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -238,7 +256,7 @@ export default function SimulationResults({
         {/* Breakdown */}
         {result.sustainability_score?.breakdown && (
           <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-5">
-            {Object.entries(result.sustainability_score.breakdown).map(
+            {Object.entries(result.sustainability_score?.breakdown ?? {}).map(
               ([key, val]) => (
                 <div key={key}>
                   <p className="text-xs text-muted-light capitalize">
@@ -302,7 +320,7 @@ export default function SimulationResults({
       <section className="py-10">
         <SectionLabel>Impact Assessment</SectionLabel>
         <div className="space-y-8">
-          {Object.entries(result.impact_scores).map(([key, dim]) => {
+          {Object.entries(result.impact_scores ?? {}).map(([key, dim]) => {
             const color = DIMENSION_COLORS[key] ?? "#6B7280";
             const label = DIMENSION_LABELS[key] ?? key;
             const pct = toPercent(dim.score);
@@ -391,7 +409,7 @@ export default function SimulationResults({
       <section className="py-10">
         <SectionLabel>Stakeholder Perspectives</SectionLabel>
         <div className="space-y-6">
-          {Object.entries(result.persona_reactions).map(([key, persona]) => (
+          {Object.entries(result.persona_reactions ?? {}).map(([key, persona]) => (
             <div key={key} className="border-l-2 border-border-light pl-4">
               <p className="text-sm font-semibold capitalize">{key}</p>
               <p className="mt-1 text-xs text-muted-light">
@@ -457,7 +475,19 @@ export default function SimulationResults({
         </>
       )}
 
-      {/* ── Section I: Refine Policy ──────────────────────────── */}
+      {/* ── Section I: Policy Assistant Chat ─────────────────── */}
+      <section className="py-10">
+        <SectionLabel>Policy Assistant</SectionLabel>
+        <PolicyChat
+          simulationId={result.simulation_id}
+          policy={formData.description}
+          location={formData.location || "Quezon City"}
+        />
+      </section>
+
+      <hr className="border-border-light" />
+
+      {/* ── Section J: Refine Policy ──────────────────────────── */}
       <section className="py-10">
         <SectionLabel>Refine & Iterate</SectionLabel>
         {!showRefine ? (
@@ -517,7 +547,7 @@ export default function SimulationResults({
 
       <hr className="border-border-light" />
 
-      {/* ── Section J: Actions ────────────────────────────────── */}
+      {/* ── Section K: Actions ────────────────────────────────── */}
       <div className="flex items-center gap-6 pt-8 pb-4">
         <button
           type="button"

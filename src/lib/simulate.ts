@@ -1,5 +1,4 @@
 // src/lib/simulate.ts
-import { getDb, schema } from '@/db';
 import { callLLM } from './llm';
 import { queryGraph } from './graph';
 import { getLocationWeatherContext } from './weather';
@@ -99,8 +98,6 @@ export async function runSimulation(
   lat?: number,
   lng?: number
 ) {
-  const db = getDb(env);
-
   // 1. Query graph for relevant historical context
   const graphContext = await queryGraph(env, `${policy} ${location} Quezon City`, 2, 8);
 
@@ -119,18 +116,22 @@ export async function runSimulation(
     ? `\n${buildWeatherSection(location, weatherCtx)}\n`
     : '';
 
+  const hasGraphContext = graphContext.entry_nodes.length > 0 || graphContext.related_nodes.length > 0;
+  const historicalSection = hasGraphContext
+    ? `## Historical Context from Knowledge Graph\n${graphContext.context_text}`
+    : `## Historical Context from Knowledge Graph\nNo direct precedents found in the knowledge base. Simulate using your general knowledge of Quezon City's governance history, Philippine urban policy patterns, and comparable cities in Southeast Asia. Lower your confidence score accordingly and note the lack of local precedents in confidence_reasoning.`;
+
   const prompt = `## Proposed Policy
 ${policy}
 
 ## Target Location
 ${location}, Quezon City, Metro Manila, Philippines
 ${weatherSection}
-## Historical Context from Knowledge Graph
-${graphContext.context_text}
+${historicalSection}
 
 ---
 
-Based on the historical context and current environmental conditions above, simulate the full impact of the proposed policy. Reference precedents by name. Return the complete simulation JSON.`;
+Simulate the full impact of the proposed policy. Return the complete simulation JSON — always return a valid simulation regardless of how much historical context is available.`;
 
   // 4. Run simulation via LLM
   const rawResult = await callLLM(env, prompt, SIMULATION_SYSTEM_PROMPT, {
@@ -138,30 +139,24 @@ Based on the historical context and current environmental conditions above, simu
     format: 'json',
   });
 
-  // 5. Parse result
+  // 5. Parse and validate result
   let parsed: SimulationResult;
   try {
-    const cleaned = rawResult.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const jsonStart = rawResult.indexOf('{');
+    const jsonEnd = rawResult.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON found');
+    const cleaned = rawResult.slice(jsonStart, jsonEnd + 1);
     parsed = JSON.parse(cleaned);
   } catch {
     throw new Error(`Failed to parse simulation output: ${rawResult.substring(0, 300)}`);
   }
 
-  // 6. Store in D1 via Drizzle
-  const simId = crypto.randomUUID();
-  await db.insert(schema.simulations).values({
-    id: simId,
-    input_policy: policy,
-    input_location: location,
-    retrieved_context: JSON.stringify({
-      entry_nodes: graphContext.entry_nodes,
-      related_nodes: graphContext.related_nodes,
-      edges: graphContext.edges,
-    }),
-    simulation_result: JSON.stringify(parsed),
-    sustainability_score: parsed.sustainability_score?.after ?? null,
-    weather_context: weatherCtx ? JSON.stringify(weatherCtx) : null,
-  });
+  // If the LLM returned a bare error object, reject it — but accept any simulation-shaped JSON
+  if ('error' in parsed && Object.keys(parsed).length === 1) {
+    throw new Error(`LLM returned an error instead of a simulation: ${(parsed as Record<string, unknown>).error}`);
+  }
 
+  // 6. Return result directly — skip DB persistence to avoid D1 size limits
+  const simId = crypto.randomUUID();
   return { simulation_id: simId, ...parsed };
 }

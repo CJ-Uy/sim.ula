@@ -332,27 +332,36 @@ export async function resolveEntities(
 
   for (const node of nodes) {
     const textToEmbed = `${node.type}: ${node.name}. ${node.description ?? ''}`;
-    const embedding = await getEmbedding(env, textToEmbed);
 
-    // Query Vectorize for the closest existing nodes
-    const results = await env.VECTOR_INDEX.query(embedding, {
-      topK: 3,
-      returnMetadata: 'all',
-    });
+    let canonicalId = node.id;
+    let embedding: number[] = [];
 
-    // Accept the top match only if it's the same node type and above threshold
-    const match = results.matches.find(
-      (m) =>
-        m.score >= RESOLUTION_THRESHOLD &&
-        (m.metadata as Record<string, string> | null)?.type === node.type,
-    );
+    try {
+      embedding = await getEmbedding(env, textToEmbed);
 
-    const canonicalId = match ? match.id : node.id;
+      // Query Vectorize for the closest existing nodes
+      const results = await env.VECTOR_INDEX.query(embedding, {
+        topK: 3,
+        returnMetadata: 'all',
+      });
+
+      // Accept the top match only if it's the same node type and above threshold
+      const match = results.matches.find(
+        (m) =>
+          m.score >= RESOLUTION_THRESHOLD &&
+          (m.metadata as Record<string, string> | null)?.type === node.type,
+      );
+
+      if (match) canonicalId = match.id;
+    } catch {
+      // Vectorize unavailable — keep node's own ID, skip embedding cache
+    }
+
     idMap.set(node.id, canonicalId);
 
     // Cache the embedding under the canonical ID (first one wins if multiple
     // new nodes collapse to the same canonical)
-    if (!embeddingCache.has(canonicalId)) {
+    if (embedding.length > 0 && !embeddingCache.has(canonicalId)) {
       embeddingCache.set(canonicalId, embedding);
     }
   }

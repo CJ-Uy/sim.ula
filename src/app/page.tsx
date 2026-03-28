@@ -9,9 +9,10 @@ import SimulationResults from "@/components/SimulationResults";
 import IngestForm from "@/components/IngestForm";
 import DocumentDashboard from "@/components/DocumentDashboard";
 import ScrapePanel from "@/components/ScrapePanel";
+import PolicyHistory from "@/components/PolicyHistory";
 import type { SimulationResult } from "@/lib/types";
 
-type Screen = "input" | "loading" | "results" | "ingest" | "docs" | "scrape";
+type Screen = "input" | "loading" | "results" | "ingest" | "docs" | "scrape" | "history";
 
 const INITIAL_FORM: PolicyFormData = {
   policyType: "",
@@ -28,14 +29,17 @@ function Header({
   onAddData,
   onViewDocs,
   onScrape,
+  onHistory,
   screen,
 }: {
   minimal?: boolean;
   onAddData: () => void;
   onViewDocs: () => void;
   onScrape: () => void;
+  onHistory: () => void;
   screen: Screen;
 }) {
+  const isSubPage = ["docs", "ingest", "scrape", "history"].includes(screen);
   return (
     <header className="border-b border-border-light bg-surface">
       <div className="flex items-center justify-between px-6 py-3">
@@ -50,29 +54,33 @@ function Header({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {screen !== "docs" && screen !== "ingest" && screen !== "scrape" && (
-            <button
-              onClick={onViewDocs}
-              className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-            >
-              Knowledge Base
-            </button>
-          )}
-          {screen !== "scrape" && screen !== "ingest" && screen !== "docs" && (
-            <button
-              onClick={onScrape}
-              className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-            >
-              Scrape
-            </button>
-          )}
-          {screen !== "ingest" && screen !== "docs" && screen !== "scrape" && (
-            <button
-              onClick={onAddData}
-              className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-            >
-              + Add Data
-            </button>
+          {!isSubPage && (
+            <>
+              <button
+                onClick={onHistory}
+                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+              >
+                Your Policies
+              </button>
+              <button
+                onClick={onViewDocs}
+                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+              >
+                Knowledge Base
+              </button>
+              <button
+                onClick={onScrape}
+                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+              >
+                Scrape
+              </button>
+              <button
+                onClick={onAddData}
+                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+              >
+                + Add Data
+              </button>
+            </>
           )}
           <span className="text-xs text-muted-light">v0.1</span>
         </div>
@@ -143,6 +151,7 @@ export default function Home() {
         onAddData={() => setScreen("ingest")}
         onViewDocs={() => setScreen("docs")}
         onScrape={() => setScreen("scrape")}
+        onHistory={() => setScreen("history")}
         screen={screen}
       />
 
@@ -202,6 +211,12 @@ export default function Home() {
       {screen === "scrape" && (
         <main className="min-h-0 flex-1 overflow-hidden">
           <ScrapePanel onBack={() => setScreen("input")} />
+        </main>
+      )}
+
+      {screen === "history" && (
+        <main className="min-h-0 flex-1 overflow-hidden">
+          <PolicyHistory onBack={() => setScreen("input")} />
         </main>
       )}
     </div>

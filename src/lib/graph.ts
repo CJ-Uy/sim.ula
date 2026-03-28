@@ -19,13 +19,19 @@ export async function queryGraph(
   const db = getDb(env);
 
   // ── Step 1: Vector search for entry points ──────────────────────────────
-  const queryEmbedding = await getEmbedding(env, queryText);
-  const vectorResults = await env.VECTOR_INDEX.query(queryEmbedding, {
-    topK,
-    returnMetadata: 'all',
-  });
-
-  const entryNodeIds = vectorResults.matches.map((m) => m.id);
+  // Best-effort — if Vectorize is unavailable (e.g. local dev), fall back to
+  // an empty context so the simulation still runs without graph precedents.
+  let entryNodeIds: string[] = [];
+  try {
+    const queryEmbedding = await getEmbedding(env, queryText);
+    const vectorResults = await env.VECTOR_INDEX.query(queryEmbedding, {
+      topK,
+      returnMetadata: 'all',
+    });
+    entryNodeIds = vectorResults.matches.map((m) => m.id);
+  } catch {
+    console.warn('[queryGraph] Vector search unavailable — returning empty context');
+  }
 
   if (entryNodeIds.length === 0) {
     return {

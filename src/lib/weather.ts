@@ -48,9 +48,13 @@ export async function getCachedWeather(
   const key = buildCacheKey(type, lat, lng);
   const db = getDb(env);
 
-  // 1. KV (fastest, ~1ms)
-  const kvHit = await env.CACHE.get(key);
-  if (kvHit) return JSON.parse(kvHit);
+  // 1. KV (fastest, ~1ms) — best-effort, fall through if unavailable
+  try {
+    const kvHit = await env.CACHE.get(key);
+    if (kvHit) return JSON.parse(kvHit);
+  } catch {
+    // KV unavailable — continue to D1
+  }
 
   // 2. D1 (check if not expired)
   const now = new Date().toISOString();
@@ -67,12 +71,14 @@ export async function getCachedWeather(
 
   if (row) {
     const parsed = JSON.parse(row.data);
-    // Repopulate KV from D1
+    // Repopulate KV from D1 — best-effort
     const ttlRemaining = Math.floor(
       (new Date(row.expires_at).getTime() - Date.now()) / 1000
     );
     if (ttlRemaining > 0) {
-      await env.CACHE.put(key, row.data, { expirationTtl: ttlRemaining });
+      try {
+        await env.CACHE.put(key, row.data, { expirationTtl: ttlRemaining });
+      } catch { /* ignore */ }
     }
     return parsed;
   }
@@ -97,7 +103,9 @@ export async function getCachedWeather(
       set: { data: dataStr, fetched_at: new Date().toISOString(), expires_at: expires },
     });
 
-  await env.CACHE.put(key, dataStr, { expirationTtl: CACHE_TTL_SECONDS });
+  try {
+    await env.CACHE.put(key, dataStr, { expirationTtl: CACHE_TTL_SECONDS });
+  } catch { /* ignore */ }
 
   return data;
 }
