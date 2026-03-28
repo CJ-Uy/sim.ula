@@ -32,7 +32,6 @@ function generateGrid(
   bounds: { north: number; south: number; east: number; west: number },
   step: number
 ): Array<{ lat: number; lng: number }> {
-  // Widen step if viewport is large to stay under MAX_POINTS
   const latRange = bounds.north - bounds.south;
   const lngRange = bounds.east - bounds.west;
   const estCount = (latRange / step) * (lngRange / step);
@@ -49,38 +48,60 @@ function generateGrid(
   return points;
 }
 
+// --- Internal weather API (routes through /api/weather for caching) ---
+// Each grid point is fetched via our own edge worker, which caches results
+// in KV + D1. First load per coordinate calls Open-Meteo; every subsequent
+// viewer (same coordinates) gets a KV hit in ~1ms instead.
+
+async function fetchWeatherPoint(
+  lat: number,
+  lng: number,
+  type: "heat" | "aqi" | "flood"
+): Promise<unknown> {
+  try {
+    const res = await fetch(`/api/weather?lat=${lat}&lng=${lng}&type=${type}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 // --- Fetch heat index grid ---
 
 export async function fetchHeatGrid(
   bounds: { north: number; south: number; east: number; west: number }
 ): Promise<FeatureCollection<Point>> {
-  const points = generateGrid(bounds, 0.01); // ~1km spacing for dense heatmap
+  const points = generateGrid(bounds, 0.01);
   if (points.length === 0) return { type: "FeatureCollection", features: [] };
 
-  const lats = points.map((p) => p.lat).join(",");
-  const lngs = points.map((p) => p.lng).join(",");
-
-  const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}&current=temperature_2m,apparent_temperature,relative_humidity_2m`
+  const results = await Promise.all(
+    points.map((p) => fetchWeatherPoint(p.lat, p.lng, "heat"))
   );
-  const data = (await res.json()) as
-    | Array<{ current: { temperature_2m: number; apparent_temperature: number; relative_humidity_2m: number } }>
-    | { current: { temperature_2m: number; apparent_temperature: number; relative_humidity_2m: number } };
-
-  // Single point returns an object, multiple returns an array
-  const results = Array.isArray(data) ? data : [data];
 
   return {
     type: "FeatureCollection",
-    features: results.map((r, i) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
-      properties: {
-        apparentTemperature: r.current.apparent_temperature,
-        temperature: r.current.temperature_2m,
-        humidity: r.current.relative_humidity_2m,
-      },
-    })),
+    features: results
+      .map((r, i) => {
+        const data = r as {
+          current?: {
+            temperature_2m?: number;
+            apparent_temperature?: number;
+            relative_humidity_2m?: number;
+          };
+        } | null;
+        if (!data?.current) return null;
+        return {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
+          properties: {
+            apparentTemperature: data.current.apparent_temperature ?? 0,
+            temperature: data.current.temperature_2m ?? 0,
+            humidity: data.current.relative_humidity_2m ?? 0,
+          },
+        };
+      })
+      .filter((f): f is NonNullable<typeof f> => f !== null),
   };
 }
 
@@ -89,34 +110,32 @@ export async function fetchHeatGrid(
 export async function fetchAqiGrid(
   bounds: { north: number; south: number; east: number; west: number }
 ): Promise<FeatureCollection<Point>> {
-  const points = generateGrid(bounds, 0.015); // ~1.5km spacing for dense heatmap
+  const points = generateGrid(bounds, 0.015);
   if (points.length === 0) return { type: "FeatureCollection", features: [] };
 
-  const lats = points.map((p) => p.lat).join(",");
-  const lngs = points.map((p) => p.lng).join(",");
-
-  const res = await fetch(
-    `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lats}&longitude=${lngs}&current=us_aqi,pm2_5,pm10`
+  const results = await Promise.all(
+    points.map((p) => fetchWeatherPoint(p.lat, p.lng, "aqi"))
   );
-  const data = (await res.json()) as
-    | Array<{ current: { us_aqi: number; pm2_5: number; pm10: number } }>
-    | { current: { us_aqi: number; pm2_5: number; pm10: number } };
-
-  const results = Array.isArray(data) ? data : [data];
 
   return {
     type: "FeatureCollection",
     features: results
-      .map((r, i) => ({
-        type: "Feature" as const,
-        geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
-        properties: {
-          usAqi: r.current.us_aqi,
-          pm25: r.current.pm2_5,
-          pm10: r.current.pm10,
-        },
-      }))
-      .filter((f) => f.properties.usAqi != null),
+      .map((r, i) => {
+        const data = r as {
+          current?: { us_aqi?: number; pm2_5?: number; pm10?: number };
+        } | null;
+        if (!data?.current || data.current.us_aqi == null) return null;
+        return {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
+          properties: {
+            usAqi: data.current.us_aqi,
+            pm25: data.current.pm2_5 ?? 0,
+            pm10: data.current.pm10 ?? 0,
+          },
+        };
+      })
+      .filter((f): f is NonNullable<typeof f> => f !== null),
   };
 }
 
@@ -125,35 +144,29 @@ export async function fetchAqiGrid(
 export async function fetchFloodGrid(
   bounds: { north: number; south: number; east: number; west: number }
 ): Promise<FeatureCollection<Point>> {
-  const points = generateGrid(bounds, 0.02); // ~2km spacing for dense heatmap
+  const points = generateGrid(bounds, 0.02);
   if (points.length === 0) return { type: "FeatureCollection", features: [] };
 
-  const lats = points.map((p) => p.lat).join(",");
-  const lngs = points.map((p) => p.lng).join(",");
-
-  const res = await fetch(
-    `https://flood-api.open-meteo.com/v1/flood?latitude=${lats}&longitude=${lngs}&daily=river_discharge_mean&forecast_days=1`
+  const results = await Promise.all(
+    points.map((p) => fetchWeatherPoint(p.lat, p.lng, "flood"))
   );
-  const data = (await res.json()) as
-    | Array<{ daily: { river_discharge_mean: Array<number | null> } }>
-    | { daily: { river_discharge_mean: Array<number | null> } };
-
-  const results = Array.isArray(data) ? data : [data];
 
   return {
     type: "FeatureCollection",
     features: results
       .map((r, i) => {
-        const discharge = r.daily?.river_discharge_mean?.[0];
+        const data = r as {
+          daily?: { river_discharge_mean?: (number | null)[] };
+        } | null;
+        const discharge = data?.daily?.river_discharge_mean?.[0];
+        if (!discharge || discharge <= 0) return null;
         return {
           type: "Feature" as const,
           geometry: { type: "Point" as const, coordinates: [points[i].lng, points[i].lat] },
-          properties: {
-            riverDischarge: discharge ?? 0,
-          },
+          properties: { riverDischarge: discharge },
         };
       })
-      .filter((f) => f.properties.riverDischarge > 0),
+      .filter((f): f is NonNullable<typeof f> => f !== null),
   };
 }
 

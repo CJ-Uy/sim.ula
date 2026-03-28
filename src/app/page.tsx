@@ -6,8 +6,9 @@ import type { PolicyFormData } from "@/components/PolicyInput";
 import PolicyMap from "@/components/PolicyMap";
 import SimulationLoading from "@/components/SimulationLoading";
 import SimulationResults from "@/components/SimulationResults";
+import IngestForm from "@/components/IngestForm";
 
-type Screen = "input" | "loading" | "results";
+type Screen = "input" | "loading" | "results" | "ingest";
 
 const INITIAL_FORM: PolicyFormData = {
   policyType: "",
@@ -19,7 +20,15 @@ const INITIAL_FORM: PolicyFormData = {
   agency: "",
 };
 
-function Header({ minimal }: { minimal?: boolean }) {
+function Header({
+  minimal,
+  onAddData,
+  screen,
+}: {
+  minimal?: boolean;
+  onAddData: () => void;
+  screen: Screen;
+}) {
   return (
     <header className="border-b border-border-light bg-surface">
       <div className="flex items-center justify-between px-6 py-3">
@@ -33,7 +42,17 @@ function Header({ minimal }: { minimal?: boolean }) {
             </span>
           )}
         </div>
-        <span className="text-xs text-muted-light">v0.1</span>
+        <div className="flex items-center gap-4">
+          {screen !== "ingest" && (
+            <button
+              onClick={onAddData}
+              className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+            >
+              + Add Data
+            </button>
+          )}
+          <span className="text-xs text-muted-light">v0.1</span>
+        </div>
       </div>
     </header>
   );
@@ -87,7 +106,11 @@ export default function Home() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <Header minimal={screen === "loading"} />
+      <Header
+        minimal={screen === "loading"}
+        onAddData={() => setScreen("ingest")}
+        screen={screen}
+      />
 
       {screen === "input" && (
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -121,6 +144,12 @@ export default function Home() {
       {screen === "results" && (
         <main className="min-h-0 flex-1 overflow-y-auto">
           <SimulationResults formData={formData} onReset={handleReset} />
+        </main>
+      )}
+
+      {screen === "ingest" && (
+        <main className="min-h-0 flex-1 overflow-hidden">
+          <IngestForm onBack={() => setScreen("input")} />
         </main>
       )}
     </div>

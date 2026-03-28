@@ -1,0 +1,87 @@
+# SearXNG settings for Schrollar
+# This config enables the JSON API and optimizes for programmatic use
+
+use_default_settings: true
+
+general:
+  instance_name: "Schrollar Search"
+  debug: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - html
+    - json # CRITICAL: enables /search?format=json API
+
+server:
+  secret_key: "schrollar-searxng-secret-change-me-in-production"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false # Disable rate limiting for local/API use
+  public_instance: false
+  image_proxy: false
+
+# Search engines to use
+# Prioritize engines good for academic + general content
+engines:
+  # General search
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+
+  # Academic / Science
+  - name: google scholar
+    engine: google_scholar
+    shortcut: gs
+    disabled: false
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: arx
+    disabled: false
+
+  - name: pubmed
+    engine: pubmed
+    shortcut: pm
+    disabled: false
+
+  # Reference
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+  # News
+  - name: google news
+    engine: google_news
+    shortcut: gn
+    disabled: false
+
+  # Disable noisy/slow engines
+  - name: yahoo
+    engine: yahoo
+    disabled: true
+
+  - name: brave
+    engine: brave
+    disabled: true
+
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 15.0
+  useragent_suffix: ""
+  pool_connections: 100
+  pool_maxsize: 20

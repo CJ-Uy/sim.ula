@@ -1,0 +1,71 @@
+# =============================================================
+# Schrollar Infrastructure - Docker Compose
+# =============================================================
+# Services:
+#   - SearXNG       → http://localhost:8888  (web search API)
+#   - DeBERTa NLI   → http://localhost:8890  (fact grounding API)
+#
+# Ollama is assumed to already be running on localhost:11434
+# (installed natively, not in Docker)
+#
+# After starting, Cloudflare tunnel each port just like Ollama:
+#   cloudflared tunnel --url http://localhost:8888  (searxng)
+#   cloudflared tunnel --url http://localhost:8890  (deberta)
+# =============================================================
+
+services:
+  # -------------------------------------------------------
+  # SearXNG - Self-hosted meta search engine (FREE, UNLIMITED)
+  # Aggregates Google, Bing, DuckDuckGo, Wikipedia, etc.
+  # API endpoint: GET http://localhost:8888/search?q=query&format=json
+  # -------------------------------------------------------
+  searxng:
+    image: searxng/searxng:latest
+    container_name: schrollar-searxng
+    ports:
+      - "8888:8080"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ./searxng/limiter.toml:/etc/searxng/limiter.toml:ro
+      - searxng-data:/etc/searxng
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8888
+    restart: unless-stopped
+    networks:
+      - schrollar-net
+
+  # -------------------------------------------------------
+  # DeBERTa NLI - Fact grounding/verification API
+  # Checks if AI-generated claims are entailed by source text
+  # API endpoint: POST http://localhost:8890/verify
+  # -------------------------------------------------------
+  deberta-nli:
+    build:
+      context: ./deberta-nli
+      dockerfile: Dockerfile
+    container_name: schrollar-deberta
+    ports:
+      - "8890:8890"
+    volumes:
+      - deberta-model-cache:/root/.cache/huggingface
+    environment:
+      - ENTAILMENT_THRESHOLD=0.85
+    restart: unless-stopped
+    networks:
+      - schrollar-net
+    # Uncomment below if you have an NVIDIA GPU for faster inference
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  searxng-data:
+  deberta-model-cache:
+
+networks:
+  schrollar-net:
+    driver: bridge
