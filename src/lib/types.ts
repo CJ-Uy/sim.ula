@@ -242,6 +242,9 @@ export interface ScrapeEvent {
   by_ring?: Record<number, { done: number; total: number }>;
   message?: string;
   error?: string;
+  duration_ms?: number;
+  pages_fetched?: number;
+  doc_length?: number;
 }
 
 export interface ScrapeRequest {

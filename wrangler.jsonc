@@ -80,6 +80,6 @@
     "DEBERTA_URL": "https://deberta.cjuy.dev",
     "OLLAMA_MODEL": "qwen3:8b",
     "EMBED_MODEL": "nomic-embed-text",
-    "OLLAMA_TIMEOUT_MS": "30000",
+    "OLLAMA_TIMEOUT_MS": "120000",
   },
 }

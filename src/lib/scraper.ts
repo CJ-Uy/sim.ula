@@ -337,6 +337,7 @@ async function scrapeCityTopic(
 ): Promise<{ policiesFound: number; edgesCreated: number; crossLinks: number }> {
   const db = getDb(env);
   const searchQuery = generateSearchQuery(city, topic);
+  const jobStart = Date.now();
 
   // Update job status
   await db.update(schema.scrapeJobs)
@@ -344,8 +345,9 @@ async function scrapeCityTopic(
     .where(eq(schema.scrapeJobs.id, jobId));
 
   // 1. Search SearXNG
+  const searchStart = Date.now();
   const results = await searchSearXNG(env, searchQuery);
-  send({ type: 'search_done', city: city.name, topic, results_count: results.length });
+  send({ type: 'search_done', city: city.name, topic, results_count: results.length, duration_ms: Date.now() - searchStart });
 
   await db.update(schema.scrapeJobs)
     .set({ results_found: results.length })
@@ -363,8 +365,12 @@ async function scrapeCityTopic(
     .set({ status: 'extracting' })
     .where(eq(schema.scrapeJobs.id, jobId));
 
+  const fetchStart = Date.now();
   const enrichedResults = await enrichWithFullPages(results, 5);
+  const pagesFetched = enrichedResults.filter((r) => r.content.length > 500).length;
+  const fetchDuration = Date.now() - fetchStart;
   const docText = buildDocumentText(city, topic, enrichedResults);
+  send({ type: 'job_start', city: city.name, topic, message: `Fetched ${pagesFetched} full pages (${(docText.length / 1024).toFixed(1)}KB)`, duration_ms: fetchDuration, pages_fetched: pagesFetched, doc_length: docText.length });
 
   // 3. Run through ingest pipeline
   const docId = `scrape-${city.id}-${topic.replace(/\s+/g, '-').substring(0, 30)}-${Date.now()}`;
@@ -388,6 +394,7 @@ async function scrapeCityTopic(
   }).onConflictDoNothing();
 
   // Extract entities with city context
+  const extractStart = Date.now();
   const extracted = await extractEntities(env, docText, docId, 'qwen3:8b', false, cityCtx);
 
   // If no meaningful entities extracted, skip this job (don't pollute the graph)
@@ -399,7 +406,7 @@ async function scrapeCityTopic(
     await db.update(schema.scrapeJobs)
       .set({ status: 'done', policies_ingested: 0, completed_at: new Date().toISOString() })
       .where(eq(schema.scrapeJobs.id, jobId));
-    send({ type: 'extract_done', city: city.name, topic, policies_found: 0, edges_created: 0 });
+    send({ type: 'extract_done', city: city.name, topic, policies_found: 0, edges_created: 0, duration_ms: Date.now() - extractStart, doc_length: docText.length });
     return { policiesFound: 0, edgesCreated: 0, crossLinks: 0 };
   }
 
@@ -496,8 +503,10 @@ async function scrapeCityTopic(
     topic,
     policies_found: policiesFound,
     edges_created: edgesCreated,
+    duration_ms: Date.now() - extractStart,
+    doc_length: docText.length,
   });
-  send({ type: 'crosslink_done', city: city.name, cross_links: crossLinks });
+  send({ type: 'crosslink_done', city: city.name, cross_links: crossLinks, duration_ms: Date.now() - jobStart });
 
   // Create similar_policy edges to QC policies
   await linkSimilarPoliciesAcrossCities(env, extracted.nodes, embeddingCache);
@@ -631,12 +640,15 @@ export async function runScrapeSession(
 ): Promise<void> {
   const db = getDb(env);
 
-  // Clear any previous stop flag
-  await env.CACHE.delete(STOP_FLAG_KEY);
+  // Clear any previous stop flag (KV can fail transiently — don't crash)
+  try { await env.CACHE.delete(STOP_FLAG_KEY); } catch { /* ignore */ }
 
   // Get current cycle count
-  const cycleStr = await env.CACHE.get(CYCLE_COUNT_KEY);
-  const cycleCount = cycleStr ? parseInt(cycleStr, 10) : 0;
+  let cycleCount = 0;
+  try {
+    const cycleStr = await env.CACHE.get(CYCLE_COUNT_KEY);
+    cycleCount = cycleStr ? parseInt(cycleStr, 10) : 0;
+  } catch { /* start at 0 if KV fails */ }
 
   send({ type: 'session_start', cycle: cycleCount, message: `Starting scrape cycle ${cycleCount + 1}` });
 
@@ -718,8 +730,9 @@ export async function runScrapeSession(
   const SEARCH_BATCH = 4;
 
   for (let i = 0; i < jobs.length; i += OLLAMA_CONCURRENCY) {
-    // Check stop flag
-    const stopRequested = await env.CACHE.get(STOP_FLAG_KEY);
+    // Check stop flag (KV can fail transiently — treat failure as "don't stop")
+    let stopRequested: string | null = null;
+    try { stopRequested = await env.CACHE.get(STOP_FLAG_KEY); } catch { /* continue */ }
     if (stopRequested === 'true') {
       // Mark remaining jobs as stopped
       for (let j = i; j < jobs.length; j++) {
@@ -778,14 +791,14 @@ export async function runScrapeSession(
       by_ring: byRing,
     });
 
-    // Brief delay between batches
+    // Brief delay between batches to avoid D1/KV rate limits
     if (i + OLLAMA_CONCURRENCY < jobs.length) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
   }
 
   // Increment cycle count
-  await env.CACHE.put(CYCLE_COUNT_KEY, String(cycleCount + 1));
+  try { await env.CACHE.put(CYCLE_COUNT_KEY, String(cycleCount + 1)); } catch { /* ignore */ }
 
   send({
     type: 'complete',
@@ -801,5 +814,10 @@ export async function runScrapeSession(
  * Signal the scrape session to stop after the current job(s) finish.
  */
 export async function requestScrapeStop(env: Env): Promise<void> {
-  await env.CACHE.put(STOP_FLAG_KEY, 'true', { expirationTtl: 3600 });
+  // Retry once if KV fails
+  try {
+    await env.CACHE.put(STOP_FLAG_KEY, 'true', { expirationTtl: 3600 });
+  } catch {
+    await env.CACHE.put(STOP_FLAG_KEY, 'true', { expirationTtl: 3600 });
+  }
 }

@@ -3,6 +3,14 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { ScrapeEvent } from "@/lib/types";
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.round((ms % 60000) / 1000);
+  return `${mins}m ${secs}s`;
+}
+
 interface ScrapeStatus {
   total_jobs: number;
   by_status: Record<string, number>;
@@ -421,14 +429,20 @@ export default function ScrapePanel({ onBack }: { onBack: () => void }) {
                     {event.results_count !== undefined && (
                       <span className="text-muted"> &mdash; {event.results_count} results</span>
                     )}
+                    {event.pages_fetched !== undefined && (
+                      <span className="text-blue-500"> &mdash; {event.pages_fetched} pages fetched{event.doc_length ? ` (${(event.doc_length / 1024).toFixed(1)}KB)` : ''}</span>
+                    )}
                     {event.policies_found !== undefined && (
-                      <span className="text-teal-600"> &mdash; {event.policies_found} policies, {event.edges_created ?? 0} edges</span>
+                      <span className="text-teal-600"> &mdash; {event.policies_found} policies, {event.edges_created ?? 0} edges{event.doc_length ? ` from ${(event.doc_length / 1024).toFixed(1)}KB` : ''}</span>
                     )}
                     {event.cross_links !== undefined && event.cross_links > 0 && (
                       <span className="text-purple-600"> +{event.cross_links} cross-links</span>
                     )}
                     {event.error && (
                       <span className="text-red-500"> {event.error}</span>
+                    )}
+                    {event.duration_ms !== undefined && (
+                      <span className="text-stone-400 ml-1">({formatDuration(event.duration_ms)})</span>
                     )}
                   </div>
                   {event.ring && <RingBadge ring={event.ring} />}
