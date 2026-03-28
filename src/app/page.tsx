@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import PolicyInput from "@/components/PolicyInput";
 import type { PolicyFormData } from "@/components/PolicyInput";
 import PolicyMap from "@/components/PolicyMap";
@@ -40,9 +40,31 @@ function Header({
   screen: Screen;
 }) {
   const isSubPage = ["docs", "ingest", "scrape", "history"].includes(screen);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
+
+  const navItems = [
+    { label: "Your Policies", action: onHistory },
+    { label: "Knowledge Base", action: onViewDocs },
+    { label: "Scrape", action: onScrape },
+    { label: "+ Add Data", action: onAddData },
+  ];
+
   return (
     <header className="border-b border-border-light bg-surface">
-      <div className="flex items-center justify-between px-6 py-3">
+      <div className="flex items-center justify-between px-4 py-3 sm:px-6">
         <div className="flex items-baseline gap-3">
           <span className="font-serif text-lg font-semibold tracking-tight">
             sim.ula
@@ -54,35 +76,70 @@ function Header({
           )}
         </div>
         <div className="flex items-center gap-3">
+          {/* Desktop nav */}
           {!isSubPage && (
-            <>
-              <button
-                onClick={onHistory}
-                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-              >
-                Your Policies
-              </button>
-              <button
-                onClick={onViewDocs}
-                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-              >
-                Knowledge Base
-              </button>
-              <button
-                onClick={onScrape}
-                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-              >
-                Scrape
-              </button>
-              <button
-                onClick={onAddData}
-                className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-              >
-                + Add Data
-              </button>
-            </>
+            <div className="hidden sm:flex items-center gap-3">
+              {navItems.map((item) => (
+                <button
+                  key={item.label}
+                  onClick={item.action}
+                  className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           )}
           <span className="text-xs text-muted-light">v0.1</span>
+          {/* Mobile hamburger */}
+          {!isSubPage && (
+            <div ref={menuRef} className="relative sm:hidden">
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="Menu"
+                className="flex h-8 w-8 items-center justify-center border border-border text-muted hover:text-foreground transition-colors"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                >
+                  {menuOpen ? (
+                    <>
+                      <line x1="4" y1="4" x2="12" y2="12" />
+                      <line x1="12" y1="4" x2="4" y2="12" />
+                    </>
+                  ) : (
+                    <>
+                      <line x1="2" y1="4" x2="14" y2="4" />
+                      <line x1="2" y1="8" x2="14" y2="8" />
+                      <line x1="2" y1="12" x2="14" y2="12" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 min-w-45 border border-border-light bg-surface shadow-lg">
+                  {navItems.map((item) => (
+                    <button
+                      key={item.label}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        item.action();
+                      }}
+                      className="block w-full px-4 py-3 text-left text-sm font-medium text-muted hover:bg-background hover:text-foreground transition-colors"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>
