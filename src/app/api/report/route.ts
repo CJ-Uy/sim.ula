@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       const r2Data = await r2Get(r2Key);
       if (r2Data) {
         const full = JSON.parse(r2Data);
-        simulationResult = full.simulation_result;
+        simulationResult = full.result ?? full.simulation_result;
         context = full.retrieved_context ?? {};
         weatherContext = full.weather_context ?? null;
       } else {
