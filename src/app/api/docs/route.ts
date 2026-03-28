@@ -1,7 +1,7 @@
 // app/api/docs/route.ts
 import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
-import { eq, count, sql } from 'drizzle-orm';
+import { eq, count, desc } from 'drizzle-orm';
 
 export const runtime = 'edge';
 
@@ -9,7 +9,7 @@ export async function GET() {
   const env = await getEnv();
   const db = getDb(env);
 
-  const docs = await db.select().from(schema.documents).orderBy(sql`ingested_at DESC`).all();
+  const docs = await db.select().from(schema.documents).orderBy(desc(schema.documents.ingested_at)).all();
 
   // Get node counts per document
   const nodeCounts = await db
