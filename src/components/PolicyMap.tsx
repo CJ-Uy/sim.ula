@@ -9,18 +9,19 @@ import Map, {
   NavigationControl,
   type MapLayerMouseEvent,
   type MapRef,
+  type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
+import type { FeatureCollection, Point } from "geojson";
+import type { LayerProps } from "react-map-gl/maplibre";
 import {
-  floodZones,
-  heatZones,
-  aqiStations,
+  fetchHeatGrid,
+  fetchAqiGrid,
+  fetchFloodGrid,
+  getHeatColor,
   getAqiColor,
   getAqiLabel,
-  getFloodColor,
-  getHeatColor,
-} from "@/data/mockVulnerabilities";
-import type { FillLayerSpecification, CircleLayerSpecification } from "maplibre-gl";
+} from "@/data/openMeteo";
 
 interface PolicyMapProps {
   onLocationSelect: (location: string, lat: number, lng: number) => void;
@@ -35,12 +36,6 @@ const LAYERS_CONFIG = [
 
 type LayerId = (typeof LAYERS_CONFIG)[number]["id"];
 
-interface HoverInfo {
-  lng: number;
-  lat: number;
-  html: string;
-}
-
 interface ClickPopupInfo {
   lng: number;
   lat: number;
@@ -50,59 +45,170 @@ interface ClickPopupInfo {
   humidity?: number;
 }
 
-// Layer style specs
-const floodLayerStyle: FillLayerSpecification = {
-  id: "flood-zones",
-  type: "fill",
-  source: "flood-zones",
+interface HoverInfo {
+  lng: number;
+  lat: number;
+  html: string;
+}
+
+const EMPTY_FC: FeatureCollection<Point> = { type: "FeatureCollection", features: [] };
+
+// --- Heatmap layer styles ---
+
+// Heat index: continuous red/orange heatmap weighted by apparent temperature
+const heatHeatmapStyle: HeatmapLayerSpecification = {
+  id: "heat-heatmap",
+  type: "heatmap",
+  source: "heat-points",
   paint: {
-    "fill-color": [
-      "match",
-      ["get", "riskLevel"],
-      "high", getFloodColor("high"),
-      "moderate", getFloodColor("moderate"),
-      getFloodColor("low"),
+    "heatmap-weight": [
+      "interpolate", ["linear"], ["get", "apparentTemperature"],
+      15, 0,
+      25, 0.3,
+      32, 0.6,
+      38, 0.85,
+      45, 1,
     ],
-    "fill-opacity": 0.3,
+    "heatmap-intensity": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 0.6,
+      13, 1.2,
+      16, 1.8,
+    ],
+    "heatmap-radius": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 15,
+      12, 30,
+      15, 50,
+    ],
+    "heatmap-color": [
+      "interpolate", ["linear"], ["heatmap-density"],
+      0, "rgba(0,0,0,0)",
+      0.15, "rgba(163,230,53,0.4)",
+      0.35, "rgba(251,191,36,0.55)",
+      0.55, "rgba(249,115,22,0.65)",
+      0.75, "rgba(239,68,68,0.75)",
+      1, "rgba(220,38,38,0.85)",
+    ],
+    "heatmap-opacity": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 0.7,
+      16, 0.5,
+    ],
   },
 };
 
-const heatLayerStyle: FillLayerSpecification = {
-  id: "heat-zones",
-  type: "fill",
-  source: "heat-zones",
-  paint: {
-    "fill-color": [
-      "interpolate",
-      ["linear"],
-      ["get", "heatIndex"],
-      35, "#fbbf24",
-      39, "#f97316",
-      42, "#dc2626",
-    ],
-    "fill-opacity": 0.35,
-  },
-};
-
-const aqiLayerStyle: CircleLayerSpecification = {
-  id: "aqi-stations",
+// Invisible circle layer on top for hover interactivity
+const heatCircleStyle: CircleLayerSpecification = {
+  id: "heat-points",
   type: "circle",
-  source: "aqi-stations",
+  source: "heat-points",
   paint: {
-    "circle-radius": 7,
-    "circle-color": [
-      "interpolate",
-      ["linear"],
-      ["get", "aqi"],
-      0, "#16a34a",
-      50, "#16a34a",
-      51, "#f59e0b",
-      100, "#f59e0b",
-      101, "#f97316",
-      150, "#ef4444",
+    "circle-radius": 1,
+    "circle-opacity": 0,
+  },
+};
+
+// Air quality: purple/green heatmap weighted by AQI
+const aqiHeatmapStyle: HeatmapLayerSpecification = {
+  id: "aqi-heatmap",
+  type: "heatmap",
+  source: "aqi-points",
+  paint: {
+    "heatmap-weight": [
+      "interpolate", ["linear"], ["get", "usAqi"],
+      0, 0.1,
+      50, 0.4,
+      100, 0.7,
+      200, 1,
     ],
-    "circle-stroke-color": "#ffffff",
-    "circle-stroke-width": 2,
+    "heatmap-intensity": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 0.5,
+      13, 1,
+      16, 1.5,
+    ],
+    "heatmap-radius": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 20,
+      12, 35,
+      15, 55,
+    ],
+    "heatmap-color": [
+      "interpolate", ["linear"], ["heatmap-density"],
+      0, "rgba(0,0,0,0)",
+      0.2, "rgba(22,163,74,0.35)",
+      0.45, "rgba(245,158,11,0.5)",
+      0.7, "rgba(249,115,22,0.6)",
+      1, "rgba(139,92,246,0.75)",
+    ],
+    "heatmap-opacity": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 0.65,
+      16, 0.45,
+    ],
+  },
+};
+
+const aqiCircleStyle: CircleLayerSpecification = {
+  id: "aqi-points",
+  type: "circle",
+  source: "aqi-points",
+  paint: {
+    "circle-radius": 1,
+    "circle-opacity": 0,
+  },
+};
+
+// Flood risk: blue heatmap weighted by river discharge
+const floodHeatmapStyle: HeatmapLayerSpecification = {
+  id: "flood-heatmap",
+  type: "heatmap",
+  source: "flood-points",
+  paint: {
+    "heatmap-weight": [
+      "interpolate", ["linear"], ["get", "riverDischarge"],
+      0, 0,
+      10, 0.2,
+      50, 0.5,
+      200, 0.8,
+      1000, 1,
+    ],
+    "heatmap-intensity": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 0.5,
+      13, 1,
+      16, 1.5,
+    ],
+    "heatmap-radius": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 18,
+      12, 32,
+      15, 50,
+    ],
+    "heatmap-color": [
+      "interpolate", ["linear"], ["heatmap-density"],
+      0, "rgba(0,0,0,0)",
+      0.2, "rgba(191,219,254,0.4)",
+      0.45, "rgba(96,165,250,0.55)",
+      0.7, "rgba(59,130,246,0.65)",
+      1, "rgba(29,78,216,0.8)",
+    ],
+    "heatmap-opacity": [
+      "interpolate", ["linear"], ["zoom"],
+      8, 0.65,
+      16, 0.45,
+    ],
+  },
+};
+
+const floodCircleStyle: CircleLayerSpecification = {
+  id: "flood-points",
+  type: "circle",
+  source: "flood-points",
+  paint: {
+    "circle-radius": 1,
+    "circle-opacity": 0,
   },
 };
 
@@ -112,9 +218,53 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
     new Set(["heat", "flood", "aqi"])
   );
   const [markerPos, setMarkerPos] = useState<{ lng: number; lat: number } | null>(null);
-  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const [clickPopup, setClickPopup] = useState<ClickPopupInfo | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
+
+  // Live data states
+  const [heatData, setHeatData] = useState<FeatureCollection<Point>>(EMPTY_FC);
+  const [aqiData, setAqiData] = useState<FeatureCollection<Point>>(EMPTY_FC);
+  const [floodData, setFloodData] = useState<FeatureCollection<Point>>(EMPTY_FC);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Debounced fetch timer
+  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch live vulnerability data for current map bounds
+  const fetchLayers = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const bounds = map.getBounds();
+    const boundsObj = {
+      north: bounds.getNorth(),
+      south: bounds.getSouth(),
+      east: bounds.getEast(),
+      west: bounds.getWest(),
+    };
+
+    setIsLoading(true);
+
+    try {
+      const [heat, aqi, flood] = await Promise.all([
+        fetchHeatGrid(boundsObj).catch(() => EMPTY_FC),
+        fetchAqiGrid(boundsObj).catch(() => EMPTY_FC),
+        fetchFloodGrid(boundsObj).catch(() => EMPTY_FC),
+      ]);
+      setHeatData(heat);
+      setAqiData(aqi);
+      setFloodData(flood);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Debounced version for map move events
+  const debouncedFetch = useCallback(() => {
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+    fetchTimerRef.current = setTimeout(fetchLayers, 800);
+  }, [fetchLayers]);
 
   // Center map on user's location
   useEffect(() => {
@@ -148,6 +298,17 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
     });
   }, []);
 
+  const handleMapLoad = useCallback(() => {
+    fetchLayers();
+  }, [fetchLayers]);
+
+  const handleMoveEnd = useCallback(
+    (_e: ViewStateChangeEvent) => {
+      debouncedFetch();
+    },
+    [debouncedFetch]
+  );
+
   const handleClick = useCallback(
     async (e: MapLayerMouseEvent) => {
       const { lng, lat } = e.lngLat;
@@ -160,7 +321,7 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
       try {
         const geoRes = await fetch(
           `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=16&addressdetails=1`,
-          { headers: { "User-Agent": "SimBayan/0.1" } }
+          { headers: { "User-Agent": "SimUla/0.1" } }
         );
         const geoData = (await geoRes.json()) as {
           address?: Record<string, string>;
@@ -180,7 +341,7 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
 
       onLocationSelect(locationName, lat, lng);
 
-      // Fetch live weather
+      // Fetch live weather for popup
       try {
         const weatherRes = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,apparent_temperature,relative_humidity_2m`
@@ -219,17 +380,18 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
     const { lng, lat } = e.lngLat;
     let html = "";
 
-    if (f.layer.id === "flood-zones") {
-      html = `<strong>${p.name}</strong><br/>Risk: <span style="color:${getFloodColor(p.riskLevel)};font-weight:600;">${String(p.riskLevel).charAt(0).toUpperCase() + String(p.riskLevel).slice(1)}</span>`;
-    } else if (f.layer.id === "heat-zones") {
-      const hi = typeof p.heatIndex === "string" ? parseInt(p.heatIndex) : p.heatIndex;
-      html = `<strong>${p.name}</strong><br/>Heat Index: <span style="color:${getHeatColor(hi)};font-weight:600;">${p.heatIndex}°C</span>`;
-    } else if (f.layer.id === "aqi-stations") {
-      const aqi = typeof p.aqi === "string" ? parseInt(p.aqi) : p.aqi;
-      html = `<strong>${p.stationName}</strong><br/>AQI: <span style="color:${getAqiColor(aqi)};font-weight:600;">${aqi} (${getAqiLabel(aqi)})</span><br/>Pollutant: ${p.dominantPollutant}`;
+    if (f.layer.id === "heat-points") {
+      const temp = typeof p.apparentTemperature === "string" ? parseFloat(p.apparentTemperature) : p.apparentTemperature;
+      html = `<strong>Heat Index</strong><br/>Feels like: <span style="color:${getHeatColor(temp)};font-weight:600;">${temp}°C</span><br/>Actual: ${p.temperature}°C<br/>Humidity: ${p.humidity}%`;
+    } else if (f.layer.id === "aqi-points") {
+      const aqi = typeof p.usAqi === "string" ? parseInt(p.usAqi) : p.usAqi;
+      html = `<strong>Air Quality</strong><br/>AQI: <span style="color:${getAqiColor(aqi)};font-weight:600;">${aqi} (${getAqiLabel(aqi)})</span><br/>PM2.5: ${p.pm25} · PM10: ${p.pm10}`;
+    } else if (f.layer.id === "flood-points") {
+      const discharge = typeof p.riverDischarge === "string" ? parseFloat(p.riverDischarge) : p.riverDischarge;
+      html = `<strong>River Discharge</strong><br/>Flow: <span style="color:#3b82f6;font-weight:600;">${discharge.toFixed(1)} m³/s</span>`;
     }
 
-    setHoverInfo({ lng, lat, html });
+    if (html) setHoverInfo({ lng, lat, html });
   }, []);
 
   const handleMouseLeave = useCallback(() => {
@@ -238,10 +400,11 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
     setHoverInfo(null);
   }, []);
 
+  // Invisible circle layers are interactive for hover tooltips
   const interactiveLayerIds = [
-    ...(activeLayers.has("flood") ? ["flood-zones"] : []),
-    ...(activeLayers.has("heat") ? ["heat-zones"] : []),
-    ...(activeLayers.has("aqi") ? ["aqi-stations"] : []),
+    ...(activeLayers.has("heat") ? ["heat-points"] : []),
+    ...(activeLayers.has("aqi") ? ["aqi-points"] : []),
+    ...(activeLayers.has("flood") ? ["flood-points"] : []),
   ];
 
   return (
@@ -255,6 +418,8 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
         }}
         style={{ width: "100%", height: "100%" }}
         mapStyle="https://tiles.openfreemap.org/styles/positron"
+        onLoad={handleMapLoad}
+        onMoveEnd={handleMoveEnd}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -263,24 +428,27 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
       >
         <NavigationControl position="bottom-right" showCompass={false} />
 
-        {/* Flood risk zones */}
-        {activeLayers.has("flood") && (
-          <Source id="flood-zones" type="geojson" data={floodZones}>
-            <Layer {...floodLayerStyle} />
-          </Source>
-        )}
-
-        {/* Heat zones */}
+        {/* Heat index — continuous heatmap */}
         {activeLayers.has("heat") && (
-          <Source id="heat-zones" type="geojson" data={heatZones}>
-            <Layer {...heatLayerStyle} />
+          <Source id="heat-points" type="geojson" data={heatData}>
+            <Layer {...(heatHeatmapStyle as Record<string, unknown>)} />
+            <Layer {...(heatCircleStyle as Record<string, unknown>)} />
           </Source>
         )}
 
-        {/* AQI stations */}
+        {/* Air quality — continuous heatmap */}
         {activeLayers.has("aqi") && (
-          <Source id="aqi-stations" type="geojson" data={aqiStations}>
-            <Layer {...aqiLayerStyle} />
+          <Source id="aqi-points" type="geojson" data={aqiData}>
+            <Layer {...(aqiHeatmapStyle as Record<string, unknown>)} />
+            <Layer {...(aqiCircleStyle as Record<string, unknown>)} />
+          </Source>
+        )}
+
+        {/* Flood risk — continuous heatmap */}
+        {activeLayers.has("flood") && (
+          <Source id="flood-points" type="geojson" data={floodData}>
+            <Layer {...(floodHeatmapStyle as Record<string, unknown>)} />
+            <Layer {...(floodCircleStyle as Record<string, unknown>)} />
           </Source>
         )}
 
@@ -374,7 +542,7 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
             offset={10}
             closeButton={false}
             closeOnClick={false}
-            maxWidth="200px"
+            maxWidth="220px"
           >
             <div
               style={{ fontSize: 12, lineHeight: 1.5 }}
@@ -409,6 +577,9 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
             </label>
           ))}
         </div>
+        {isLoading && (
+          <p className="mt-2 text-[10px] text-muted-light">Loading data...</p>
+        )}
       </div>
     </div>
   );
