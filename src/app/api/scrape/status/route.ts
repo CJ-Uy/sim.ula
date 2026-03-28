@@ -43,3 +43,22 @@ export async function GET() {
     last_completed: lastCompleted[0]?.completed_at ?? null,
   });
 }
+
+/**
+ * DELETE /api/scrape/status — Reset all scrape jobs and cycle count.
+ * Clears the scrape_jobs table and resets the cycle counter so the
+ * next scrape starts fresh.
+ */
+export async function DELETE() {
+  const env = await getEnv() as Env;
+  const db = getDb(env);
+
+  const deleted = await db.run(sql`DELETE FROM scrape_jobs`);
+  await env.CACHE.delete('scrape:cycle_count');
+  await env.CACHE.delete('scrape:stop_requested');
+
+  return Response.json({
+    status: 'reset',
+    jobs_deleted: deleted.meta?.changes ?? 0,
+  });
+}

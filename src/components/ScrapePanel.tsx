@@ -63,6 +63,7 @@ export default function ScrapePanel({ onBack }: { onBack: () => void }) {
   const [status, setStatus] = useState<ScrapeStatus | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [seeded, setSeeded] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -183,6 +184,29 @@ export default function ScrapePanel({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const handleReset = async () => {
+    if (!confirm("Reset all scrape jobs and cycle count? This cannot be undone.")) return;
+    setResetting(true);
+    try {
+      const res = await fetch("/api/scrape/status", { method: "DELETE" });
+      if (res.ok) {
+        const data = (await res.json()) as { jobs_deleted: number };
+        setEvents([{
+          type: "session_start",
+          message: `Reset complete. ${data.jobs_deleted} jobs cleared, cycle count reset to 0.`,
+        }]);
+        setStatus(null);
+        fetchStatus();
+      }
+    } catch (err) {
+      setEvents((prev) => [
+        ...prev,
+        { type: "job_error", error: String(err), message: `Reset failed: ${err}` },
+      ]);
+    }
+    setResetting(false);
+  };
+
   const toggleRing = (ring: number) => {
     setSelectedRings((prev) =>
       prev.includes(ring) ? prev.filter((r) => r !== ring) : [...prev, ring]
@@ -223,15 +247,24 @@ export default function ScrapePanel({ onBack }: { onBack: () => void }) {
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
               Setup
             </h2>
-            <button
-              onClick={handleSeed}
-              disabled={seeding || runState === "running"}
-              className="w-full rounded border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {seeding ? "Seeding..." : seeded ? "Re-seed City Graph" : "Seed City Graph"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSeed}
+                disabled={seeding || runState === "running"}
+                className="flex-1 rounded border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {seeding ? "Seeding..." : seeded ? "Re-seed" : "Seed City Graph"}
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={resetting || runState === "running"}
+                className="rounded border border-red-200 px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resetting ? "Resetting..." : "Reset All"}
+              </button>
+            </div>
             <p className="mt-1.5 text-[11px] text-muted-light">
-              Creates city nodes + proximity chains. Run once before first scrape.
+              Seed creates city nodes. Reset clears all jobs and cycle count.
             </p>
           </div>
 

@@ -27,8 +27,8 @@ export async function callLLM(
 
   try {
     const response = await fetch(`${env.OLLAMA_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
         model,
@@ -37,7 +37,7 @@ export async function callLLM(
         stream: true,
         options: {
           temperature: options?.temperature ?? 0.7,
-          num_ctx: 8192,
+          num_ctx: 16384,
         },
         ...(options?.format && { format: options.format }),
       }),

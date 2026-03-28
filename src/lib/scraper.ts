@@ -299,6 +299,19 @@ async function scrapeCityTopic(
   // Extract entities with city context
   const extracted = await extractEntities(env, docText, docId, 'qwen3:8b', false, cityCtx);
 
+  // If no meaningful entities extracted, skip this job (don't pollute the graph)
+  const hasPolicies = extracted.nodes.some((n) => n.type === 'policy');
+  if (!hasPolicies && extracted.nodes.length <= 1) {
+    // Clean up the empty document
+    await env.DOCS_BUCKET.delete(r2Key);
+    await db.delete(schema.documents).where(eq(schema.documents.id, docId));
+    await db.update(schema.scrapeJobs)
+      .set({ status: 'done', policies_ingested: 0, completed_at: new Date().toISOString() })
+      .where(eq(schema.scrapeJobs.id, jobId));
+    send({ type: 'extract_done', city: city.name, topic, policies_found: 0, edges_created: 0 });
+    return { policiesFound: 0, edgesCreated: 0, crossLinks: 0 };
+  }
+
   // Resolve against existing knowledge base
   const { nodes: resolvedNodes, edges: resolvedEdges, embeddingCache } =
     await resolveEntities(env, extracted.nodes, extracted.edges);
@@ -455,6 +468,8 @@ async function linkSimilarPoliciesAcrossCities(
 
 /**
  * Build a document text from synthesized search results for ingestion.
+ * Includes both the structured synthesis AND raw search snippets so the
+ * entity extractor has enough material to identify policies.
  */
 function buildDocumentText(
   city: CityConfig,
@@ -465,29 +480,34 @@ function buildDocumentText(
   const parts = [
     `Policy Research: ${topic} in ${city.name}, ${city.country}`,
     '',
-    synthesized.title ? `Title: ${synthesized.title}` : '',
-    synthesized.date ? `Date: ${synthesized.date}` : '',
-    synthesized.policyType ? `Type: ${synthesized.policyType}` : '',
-    '',
-    synthesized.whatWasThePolicy ? `Policy Description:\n${synthesized.whatWasThePolicy}` : '',
-    synthesized.whereImplemented ? `\nWhere Implemented:\n${synthesized.whereImplemented}` : '',
-    synthesized.whoWasAffected ? `\nWho Was Affected:\n${synthesized.whoWasAffected}` : '',
-    synthesized.whatHappened ? `\nOutcomes:\n${synthesized.whatHappened}` : '',
-    synthesized.whoSupportedOpposed ? `\nSupport/Opposition:\n${synthesized.whoSupportedOpposed}` : '',
-    synthesized.whatWentWrong ? `\nChallenges:\n${synthesized.whatWentWrong}` : '',
-    '',
-    'Sources:',
-    ...sources.slice(0, 5).map((s) => `- ${s.title} (${s.url})`),
   ];
 
-  return parts.filter(Boolean).join('\n');
+  // Structured synthesis (may be sparse if search results were thin)
+  if (synthesized.title) parts.push(`Title: ${synthesized.title}`);
+  if (synthesized.date) parts.push(`Date: ${synthesized.date}`);
+  if (synthesized.policyType) parts.push(`Type: ${synthesized.policyType}`);
+  if (synthesized.whatWasThePolicy) parts.push(`\nPolicy Description:\n${synthesized.whatWasThePolicy}`);
+  if (synthesized.whereImplemented) parts.push(`\nWhere Implemented:\n${synthesized.whereImplemented}`);
+  if (synthesized.whoWasAffected) parts.push(`\nWho Was Affected:\n${synthesized.whoWasAffected}`);
+  if (synthesized.whatHappened) parts.push(`\nOutcomes:\n${synthesized.whatHappened}`);
+  if (synthesized.whoSupportedOpposed) parts.push(`\nSupport/Opposition:\n${synthesized.whoSupportedOpposed}`);
+  if (synthesized.whatWentWrong) parts.push(`\nChallenges:\n${synthesized.whatWentWrong}`);
+
+  // Include raw search snippets so the extractor has more to work with
+  parts.push('\n--- Raw Search Results ---');
+  for (const s of sources.slice(0, 8)) {
+    parts.push(`\n[${s.title}]`);
+    if (s.content) parts.push(s.content);
+  }
+
+  return parts.join('\n');
 }
 
 // ── Main Orchestrator ───────────────────────────────────────────────────────
 
 const STOP_FLAG_KEY = 'scrape:stop_requested';
 const CYCLE_COUNT_KEY = 'scrape:cycle_count';
-const OLLAMA_CONCURRENCY = 2;
+const OLLAMA_CONCURRENCY = 1;
 
 export interface ScrapeOptions {
   rings?: number[];
