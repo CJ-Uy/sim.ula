@@ -2,6 +2,7 @@
 import type { Env, ExtractedGraph } from './types';
 import { callLLM, getEmbedding } from './llm';
 import { getDb, schema } from '@/db';
+import { eq, ne } from 'drizzle-orm';
 
 // Cosine similarity threshold above which two nodes are considered the same entity.
 // 0.87 avoids false positives between related-but-distinct concepts while catching
@@ -48,7 +49,7 @@ EDGE TYPE GUIDELINES:
 - "supported_by": stakeholder publicly supported the policy
 - "opposed_by": stakeholder publicly opposed or resisted the policy
 - "measured_by": outcome is quantified by a specific metric
-- "located_in": a stakeholder or event is in a specific location
+- "located_in": a stakeholder, event, or SUB-LOCATION is in a larger location. CRITICAL: Every barangay, district, street, or zone node MUST have a "located_in" edge pointing to "quezon-city". Example: if you create a node "barangay-tatalon", you MUST also create an edge { source_id: "barangay-tatalon", target_id: "quezon-city", relationship: "located_in" }. Similarly, barangays should link to their district when known.
 - "preceded": one policy came before and influenced another (temporal chain)
 - "related_to": generic connection when none of the above fit precisely
 
@@ -74,7 +75,8 @@ CRITICAL RULES:
 - Every edge must reference node IDs that exist EITHER in your nodes array OR in the existing nodes list above.
 - If the document mentions specific Philippine peso amounts, dates, percentages, or statistics, capture them in metadata.
 - Consider Philippine-specific context: barangay governance, informal economy, wet/dry seasons, flooding, jeepney/tricycle transport.
-- ALWAYS create edges connecting policies to their location (enacted_in), affected stakeholders (affected), and outcomes (resulted_in). A policy node with no edges is useless.`;
+- ALWAYS create edges connecting policies to their location (enacted_in), affected stakeholders (affected), and outcomes (resulted_in). A policy node with no edges is useless.
+- ALL policies in this dataset are about Quezon City. ALWAYS include the node "quezon-city" (type: "location") and create "enacted_in" edges from every policy to "quezon-city", even if the policy is also enacted in a specific sub-location. A policy can have multiple "enacted_in" edges.`;
 
 /**
  * Fetch existing nodes from the DB to give the LLM context about what's
@@ -83,11 +85,22 @@ CRITICAL RULES:
  */
 async function getExistingNodesContext(env: Env): Promise<string> {
   const db = getDb(env);
-  const existing = await db
+
+  // Fetch ALL location nodes (critical for graph connectivity) + up to 200 other nodes
+  const locations = await db
     .select({ id: schema.nodes.id, type: schema.nodes.type, name: schema.nodes.name })
     .from(schema.nodes)
+    .where(eq(schema.nodes.type, 'location'))
+    .all();
+
+  const others = await db
+    .select({ id: schema.nodes.id, type: schema.nodes.type, name: schema.nodes.name })
+    .from(schema.nodes)
+    .where(ne(schema.nodes.type, 'location'))
     .limit(200)
     .all();
+
+  const existing = [...locations, ...others];
 
   if (existing.length === 0) {
     return '(No existing nodes — this is the first document being ingested.)';
@@ -200,6 +213,25 @@ export async function extractEntities(
     const jsonEnd = result.lastIndexOf('}');
     if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON object found in LLM response');
     const parsed: ExtractedGraph = JSON.parse(result.slice(jsonStart, jsonEnd + 1));
+
+    // ── Sanitize LLM output ──────────────────────────────────────────────
+    // The LLM sometimes returns nodes/edges with missing required fields.
+    // Filter these out BEFORE any resolution steps to prevent undefined IDs
+    // from propagating through the pipeline.
+    parsed.nodes = (parsed.nodes ?? []).filter(
+      (n) => typeof n.id === 'string' && n.id.length > 0 && typeof n.type === 'string'
+    );
+    parsed.edges = (parsed.edges ?? []).filter((e) => {
+      const valid =
+        typeof e.source_id === 'string' &&
+        e.source_id.length > 0 &&
+        typeof e.target_id === 'string' &&
+        e.target_id.length > 0;
+      if (!valid) {
+        console.warn(`[sanitize] Dropping malformed edge: source=${e.source_id}, target=${e.target_id}`);
+      }
+      return valid;
+    });
 
     // Tag all nodes with their source document
     parsed.nodes = parsed.nodes.map((n) => ({ ...n, source_doc_id: docId }));
