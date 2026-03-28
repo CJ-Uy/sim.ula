@@ -36,6 +36,14 @@ export interface GraphEdge {
   metadata: string | null;
 }
 
+export interface GraphAPIResponse {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  truncated: boolean;
+  total_nodes: number;
+  total_edges: number;
+}
+
 export interface GraphEdgeWithNames extends GraphEdge {
   source_name: string;
   target_name: string;
