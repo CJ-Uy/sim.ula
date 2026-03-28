@@ -64,6 +64,7 @@ export interface WeatherContext {
 // ── Ingestion ─────────────────────────────────────────────────────────────────
 
 export interface IngestRequest {
+  disable_fallback?: boolean;
   documents: Array<{
     id?: string;
     title: string;

@@ -58,7 +58,8 @@ export async function extractEntities(
   env: Env,
   documentText: string,
   docId: string,
-  modelOverride?: string
+  modelOverride?: string,
+  noFallback?: boolean
 ): Promise<ExtractedGraph> {
   const prompt = `Extract all policy entities and relationships from this document about Quezon City:\n\n---\n${documentText}\n---`;
 
@@ -66,11 +67,15 @@ export async function extractEntities(
     temperature: 0.2,
     format: 'json',
     modelOverride,
+    noFallback,
   });
 
   try {
-    const cleaned = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed: ExtractedGraph = JSON.parse(cleaned);
+    // Slice from first { to last } to handle preamble text and markdown fences
+    const jsonStart = result.indexOf('{');
+    const jsonEnd = result.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON object found in LLM response');
+    const parsed: ExtractedGraph = JSON.parse(result.slice(jsonStart, jsonEnd + 1));
 
     // Tag all nodes with their source document
     parsed.nodes = parsed.nodes.map((n) => ({ ...n, source_doc_id: docId }));

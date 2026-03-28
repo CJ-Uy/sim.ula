@@ -1,16 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { IngestFormRecord, ResearchResult, SearchResult, ClaimVerification } from "@/lib/types";
-
-const POLICY_TYPES: IngestFormRecord["policyType"][] = [
-  "Ordinance",
-  "Executive Order",
-  "Plan",
-  "Implementing Rules and Regulation",
-  "Resolution",
-  "Program",
-];
+import { getAllPolicyTypes } from "@/lib/policyTypes";
 
 const EMPTY_FORM: Omit<IngestFormRecord, "model"> = {
   title: "",
@@ -212,7 +204,7 @@ interface IngestFormProps {
 
 type IngestStatus =
   | { state: "idle" }
-  | { state: "submitting" }
+  | { state: "submitting"; step: string }
   | { state: "success"; nodes: number; edges: number; docId: string }
   | { state: "error"; message: string };
 
@@ -238,7 +230,13 @@ export default function IngestForm({ onBack }: IngestFormProps) {
   const [tab, setTab] = useState<"manual" | "research">("manual");
   const [form, setForm] = useState<Omit<IngestFormRecord, "model">>(EMPTY_FORM);
   const [model, setModel] = useState<IngestFormRecord["model"]>("qwen3:8b");
+  const [disableFallback, setDisableFallback] = useState(false);
   const [ingestStatus, setIngestStatus] = useState<IngestStatus>({ state: "idle" });
+  const [policyTypes, setPolicyTypes] = useState<string[]>([]);
+
+  useEffect(() => {
+    setPolicyTypes(getAllPolicyTypes());
+  }, []);
 
   // Research state
   const [searchQuery, setSearchQuery] = useState("");
@@ -260,7 +258,7 @@ export default function IngestForm({ onBack }: IngestFormProps) {
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
-    setIngestStatus({ state: "submitting" });
+    setIngestStatus({ state: "submitting", step: "Preparing…" });
 
     const content = [
       `Policy Type: ${form.policyType}`,
@@ -290,6 +288,7 @@ export default function IngestForm({ onBack }: IngestFormProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          disable_fallback: disableFallback,
           documents: [
             {
               title: form.title,
@@ -302,21 +301,47 @@ export default function IngestForm({ onBack }: IngestFormProps) {
         }),
       });
 
-      const data = (await res.json()) as {
-        results?: Array<{ doc_id?: string; nodes_extracted?: number; edges_extracted?: number; error?: string }>;
-      };
-      const first = data.results?.[0];
+      if (!res.ok || !res.body) {
+        throw new Error(`Server returned ${res.status}`);
+      }
 
-      if (first?.error) {
-        setIngestStatus({ state: "error", message: first.error });
-      } else {
-        setIngestStatus({
-          state: "success",
-          nodes: first?.nodes_extracted ?? 0,
-          edges: first?.edges_extracted ?? 0,
-          docId: first?.doc_id ?? "",
-        });
-        setForm(EMPTY_FORM);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const event = JSON.parse(line.slice(6)) as {
+            step: string;
+            message?: string;
+            results?: Array<{ doc_id?: string; nodes_extracted?: number; edges_extracted?: number; error?: string; status?: string }>;
+          };
+
+          if (event.step === "done") {
+            const first = event.results?.[0];
+            if (first?.error || first?.status === "error") {
+              setIngestStatus({ state: "error", message: first.error ?? "Ingestion failed" });
+            } else {
+              setIngestStatus({
+                state: "success",
+                nodes: first?.nodes_extracted ?? 0,
+                edges: first?.edges_extracted ?? 0,
+                docId: first?.doc_id ?? "",
+              });
+              setForm(EMPTY_FORM);
+            }
+          } else {
+            setIngestStatus({ state: "submitting", step: event.message ?? event.step });
+          }
+        }
       }
     } catch (err) {
       setIngestStatus({ state: "error", message: String(err) });
@@ -486,7 +511,7 @@ export default function IngestForm({ onBack }: IngestFormProps) {
                   onChange={(e) => setField("policyType")(e.target.value)}
                   className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent text-foreground"
                 >
-                  {POLICY_TYPES.map((t) => (
+                  {policyTypes.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
@@ -591,6 +616,20 @@ export default function IngestForm({ onBack }: IngestFormProps) {
               </div>
             </div>
 
+            {/* Fallback toggle */}
+            <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={disableFallback}
+                onChange={(e) => setDisableFallback(e.target.checked)}
+                className="accent-accent"
+              />
+              <span>
+                Disable Workers AI fallback{" "}
+                <span className="text-muted-light">(Ollama errors surface directly)</span>
+              </span>
+            </label>
+
             {/* Submit */}
             <div className="flex items-center justify-between pt-2">
               <p className="text-xs text-muted-light">
@@ -599,15 +638,26 @@ export default function IngestForm({ onBack }: IngestFormProps) {
               <button
                 onClick={handleSubmit}
                 disabled={!canSubmit || ingestStatus.state === "submitting"}
-                className={`px-5 py-2 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 px-5 py-2 text-sm font-medium transition-colors ${
                   canSubmit && ingestStatus.state !== "submitting"
                     ? "bg-accent text-white hover:bg-accent/90"
                     : "cursor-default bg-border-light text-muted-light"
                 }`}
               >
+                {ingestStatus.state === "submitting" && (
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                )}
                 {ingestStatus.state === "submitting" ? "Ingesting…" : "Ingest into Graph"}
               </button>
             </div>
+
+            {/* Progress step */}
+            {ingestStatus.state === "submitting" && (
+              <div className="flex items-center gap-3 rounded border border-border-light bg-surface/50 px-4 py-3 text-sm text-muted">
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                {ingestStatus.step}
+              </div>
+            )}
           </div>
         )}
 

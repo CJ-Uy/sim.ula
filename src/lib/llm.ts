@@ -16,10 +16,14 @@ export async function callLLM(
     temperature?: number;
     format?: 'json';
     modelOverride?: string; // e.g. "phi4:14b" for high-quality ingestion
+    noFallback?: boolean;   // skip Workers AI fallback (useful for debugging Ollama)
   }
 ): Promise<string> {
-  const timeoutMs = parseInt(env.OLLAMA_TIMEOUT_MS || '30000');
   const model = options?.modelOverride ?? env.OLLAMA_MODEL;
+  // phi4:14b needs more time — use 3 min, other models use configured/default 60s
+  const timeoutMs = model.includes('phi4')
+    ? 180000
+    : parseInt(env.OLLAMA_TIMEOUT_MS || '60000');
 
   let ollamaError: unknown;
 
@@ -36,7 +40,7 @@ export async function callLLM(
         model,
         prompt,
         system: systemPrompt,
-        stream: false,
+        stream: true,
         options: { temperature: options?.temperature ?? 0.7 },
         ...(options?.format && { format: options.format }),
       }),
@@ -45,15 +49,39 @@ export async function callLLM(
     clearTimeout(timeout);
 
     if (!response.ok) throw new Error(`Ollama returned ${response.status}`);
+    if (!response.body) throw new Error('Ollama returned empty body');
 
-    const data = (await response.json()) as { response: string };
-    return data.response;
+    // Reassemble streamed newline-delimited JSON chunks
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullResponse = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const chunk = JSON.parse(line) as { response: string; done: boolean };
+        fullResponse += chunk.response;
+        if (chunk.done) break;
+      }
+    }
+
+    return fullResponse;
   } catch (err) {
     ollamaError = err;
     console.warn(`Ollama (${model}) failed, falling back to Workers AI:`, err);
   }
 
   // Attempt 2: Cloudflare Workers AI (fallback, always qwen3:8b equivalent)
+  if (options?.noFallback) {
+    throw new Error(`Ollama failed (fallback disabled): ${ollamaError}`);
+  }
+
   try {
     const messages = [
       { role: 'system' as const, content: systemPrompt },
@@ -84,7 +112,7 @@ export async function callLLM(
  * Both are compatible with the same Vectorize index.
  */
 export async function getEmbedding(env: Env, text: string): Promise<number[]> {
-  const timeoutMs = parseInt(env.OLLAMA_TIMEOUT_MS || '30000');
+  const timeoutMs = parseInt(env.OLLAMA_TIMEOUT_MS || '60000');
 
   let ollamaError: unknown;
 

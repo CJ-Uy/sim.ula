@@ -1,14 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-
-const POLICY_TYPES = [
-  "Ordinance",
-  "Executive Order",
-  "Plan",
-  "Resolution",
-  "Program",
-];
+import { getAllPolicyTypes } from "@/lib/policyTypes";
 
 const CATEGORIES = [
   "Building Code",
@@ -63,6 +56,7 @@ export default function PolicyInput({
   onLocationSearch,
 }: PolicyInputProps) {
   const [policyType, setPolicyType] = useState("");
+  const [policyTypes, setPolicyTypes] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -77,6 +71,10 @@ export default function PolicyInput({
       setLocationInput(selectedLocation);
     }
   }, [selectedLocation]);
+
+  useEffect(() => {
+    setPolicyTypes(getAllPolicyTypes());
+  }, []);
 
   const geocodeLocation = useCallback(
     async (query: string) => {
@@ -143,7 +141,7 @@ export default function PolicyInput({
               <option value="" disabled>
                 Select type
               </option>
-              {POLICY_TYPES.map((type) => (
+              {policyTypes.map((type) => (
                 <option key={type} value={type}>
                   {type}
                 </option>
