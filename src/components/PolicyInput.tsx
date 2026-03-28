@@ -83,7 +83,7 @@ export default function PolicyInput({
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-          { headers: { "User-Agent": "SimBayan/0.1" } }
+          { headers: { "User-Agent": "SimBayan/0.1" } },
         );
         const results = (await res.json()) as Array<{
           lat: string;
@@ -102,22 +102,24 @@ export default function PolicyInput({
         setIsGeocoding(false);
       }
     },
-    [onLocationSearch]
+    [onLocationSearch],
   );
 
   const canSubmit =
     policyType !== "" && category !== "" && description.length > 20;
 
   return (
-    <div
-      className="px-6 py-8"
-      style={{ animation: "fade-in 300ms ease" }}
-    >
+    <div className="px-6 py-8" style={{ animation: "fade-in 300ms ease" }}>
       {/* Page heading */}
       <div className="mb-8">
-        <h1 className="font-serif text-[1.5rem] font-semibold leading-tight text-foreground">
-          New Policy Simulation
-        </h1>
+        <div className="flex">
+          <h1 className="font-serif text-[2rem] font-regular leading-tight text-foreground">
+            mag
+          </h1>
+          <h1 className="font-serif text-[2rem] font-bold leading-tight text-foreground">
+            simula!
+          </h1>
+        </div>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">
           Define policy parameters. Click the map to set a location.
         </p>

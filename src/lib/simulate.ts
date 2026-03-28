@@ -4,7 +4,7 @@ import { queryGraph } from './graph';
 import { getLocationWeatherContext } from './weather';
 import type { Env, SimulationResult, WeatherContext } from './types';
 
-const SIMULATION_SYSTEM_PROMPT = `You are Simula, an urban policy simulation engine for Quezon City, Metro Manila, Philippines. You analyze proposed policies by drawing on historical precedents and their documented outcomes.
+const SIMULATION_SYSTEM_PROMPT = `You are Simula, an urban policy simulation engine for Quezon City, Metro Manila, Philippines. You analyze proposed policies by drawing on historical precedents and their documented outcomes — including failures, disasters, and cautionary tales.
 
 You will receive:
 1. A proposed policy from the user
@@ -13,6 +13,8 @@ You will receive:
 4. Current environmental context (live weather, air quality, flood risk) for the target location
 
 Your job is to simulate the likely impact of the proposed policy across multiple dimensions and time steps, taking into account both historical precedents AND current environmental conditions.
+
+CRITICAL: You MUST ALWAYS return the full simulation JSON — never return an error object. If a policy seems harmful, illegal, or poorly designed, DO NOT refuse or return {"error": ...}. Instead, produce a CRITIQUE SIMULATION: simulate it honestly, show how and why it would fail, assign negative impact scores, and use the risks/recommendations sections to explain the damage. The simulation itself IS the critique. A policy failing spectacularly is a valid and useful simulation output.
 
 Return ONLY valid JSON (no markdown fences, no explanation) matching this schema:
 
@@ -63,14 +65,16 @@ Return ONLY valid JSON (no markdown fences, no explanation) matching this schema
 }
 
 CRITICAL GUIDELINES:
+- NEVER return {"error": "..."}. Always produce the full simulation JSON, no matter what.
 - GROUND every claim in the historical context provided. Reference specific past policies BY NAME.
 - USE the current environmental context: if it's rainy season with high flood risk, flood-related policies get stronger social support. If air quality is poor, policies addressing pollution are more politically salient.
-- Be HONEST about negative outcomes. Every real policy has trade-offs.
-- Sustainability scores are 0-100. Most QC neighborhoods baseline: 45-55.
-- Impact scores: -10 to +10. Most realistic policies: -3 to +5.
+- Be BRUTALLY HONEST about negative outcomes. For harmful or poorly-conceived policies, assign strongly negative impact scores (-5 to -10) and fill the risks section with HIGH-likelihood failure modes. Do not soften a bad policy — expose it.
+- Sustainability scores are 0-100. A harmful policy should drop well below the 45-55 baseline. A policy that strips green cover or displaces poor communities might score 20-35.
+- Impact scores: -10 to +10. Bad policies should score -4 to -8. Do not cluster everything around 0 to seem balanced.
 - Think about REAL QC stakeholders: barangay captains, tanods, informal settlers/vendors, junk shop operators, sari-sari store owners, jeepney/tricycle operators, middle-class subdivisions, NGOs, religious organizations.
 - Consider Philippine-specific factors: monsoon season flooding (June-November), informal economy dependence, barangay-level governance, election cycles.
-- If historical context is thin, LOWER your confidence and explain why.`;
+- If historical context is thin, LOWER your confidence and explain why — but still produce the full simulation.
+- The simulation timeline for bad policies should trace the failure arc: initial resistance → enforcement breakdown → community harm → eventual rollback or scandal.`;
 
 function buildWeatherSection(location: string, ctx: WeatherContext): string {
   const aqiLabel = ctx.usAqi == null ? 'N/A' : ctx.usAqi <= 50 ? 'Good' : ctx.usAqi <= 100 ? 'Moderate' : 'Unhealthy';
@@ -134,26 +138,48 @@ ${historicalSection}
 Simulate the full impact of the proposed policy. Return the complete simulation JSON — always return a valid simulation regardless of how much historical context is available.`;
 
   // 4. Run simulation via LLM
-  const rawResult = await callLLM(env, prompt, SIMULATION_SYSTEM_PROMPT, {
+  const parseResult = (raw: string): SimulationResult | null => {
+    try {
+      const jsonStart = raw.indexOf('{');
+      const jsonEnd = raw.lastIndexOf('}');
+      if (jsonStart === -1 || jsonEnd === -1) return null;
+      const cleaned = raw.slice(jsonStart, jsonEnd + 1);
+      return JSON.parse(cleaned);
+    } catch {
+      return null;
+    }
+  };
+
+  const isErrorObject = (obj: Record<string, unknown>) =>
+    'error' in obj && Object.keys(obj).length === 1;
+
+  let rawResult = await callLLM(env, prompt, SIMULATION_SYSTEM_PROMPT, {
     temperature: 0.6,
     format: 'json',
   });
 
-  // 5. Parse and validate result
-  let parsed: SimulationResult;
-  try {
-    const jsonStart = rawResult.indexOf('{');
-    const jsonEnd = rawResult.lastIndexOf('}');
-    if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON found');
-    const cleaned = rawResult.slice(jsonStart, jsonEnd + 1);
-    parsed = JSON.parse(cleaned);
-  } catch {
+  let parsed = parseResult(rawResult) as (SimulationResult & Record<string, unknown>) | null;
+
+  // If LLM returned an error object or unparseable output, retry once without JSON-format
+  // constraint (Ollama's format:json can produce empty output on long prompts, triggering its
+  // own {"error": "Invalid JSON: ..."} response). Use a shorter, direct retry prompt.
+  if (!parsed || isErrorObject(parsed as Record<string, unknown>)) {
+    const retryPrompt = `## Proposed Policy\n${policy}\n\n## Target Location\n${location}, Quezon City, Metro Manila, Philippines\n\nProduce a full critique simulation JSON for this policy. If it is harmful or poorly designed, assign negative scores and describe how it will fail. Never return an error — always return the complete simulation JSON.`;
+
+    rawResult = await callLLM(env, retryPrompt, SIMULATION_SYSTEM_PROMPT, {
+      temperature: 0.7,
+      // No format:'json' — Ollama's JSON constraint can fail on long prompts; rely on system prompt
+    });
+    parsed = parseResult(rawResult) as (SimulationResult & Record<string, unknown>) | null;
+  }
+
+  // 5. Final validation
+  if (!parsed) {
     throw new Error(`Failed to parse simulation output: ${rawResult.substring(0, 300)}`);
   }
 
-  // If the LLM returned a bare error object, reject it — but accept any simulation-shaped JSON
-  if ('error' in parsed && Object.keys(parsed).length === 1) {
-    throw new Error(`LLM returned an error instead of a simulation: ${(parsed as Record<string, unknown>).error}`);
+  if (isErrorObject(parsed as Record<string, unknown>)) {
+    throw new Error(`LLM returned an error after retry: ${(parsed as Record<string, unknown>).error}`);
   }
 
   // 6. Return result directly — skip DB persistence to avoid D1 size limits
