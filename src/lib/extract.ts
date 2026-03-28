@@ -1,6 +1,11 @@
 // src/lib/extract.ts
 import type { Env, ExtractedGraph } from './types';
-import { callLLM } from './llm';
+import { callLLM, getEmbedding } from './llm';
+
+// Cosine similarity threshold above which two nodes are considered the same entity.
+// 0.87 avoids false positives between related-but-distinct concepts while catching
+// genuine duplicates like "Quezon City" vs "QC Metro Manila".
+const RESOLUTION_THRESHOLD = 0.87;
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a policy analysis expert specializing in Philippine urban governance. Given a document about urban policy in Quezon City, Metro Manila, extract structured entities and relationships.
 
@@ -95,4 +100,81 @@ export async function extractEntities(
     console.error('Failed to parse extraction result:', result.substring(0, 500));
     return { nodes: [], edges: [] };
   }
+}
+
+/**
+ * Resolves newly extracted nodes against the existing knowledge base using
+ * vector similarity. When a new node is sufficiently similar to an existing
+ * node of the same type (score >= RESOLUTION_THRESHOLD), the existing node's
+ * ID is used as the canonical ID so both documents share the same graph node.
+ *
+ * Also returns a pre-computed embedding cache keyed by canonical node ID so
+ * the caller can skip re-embedding during the Vectorize upsert step.
+ */
+export async function resolveEntities(
+  env: Env,
+  nodes: ExtractedGraph['nodes'],
+  edges: ExtractedGraph['edges'],
+): Promise<{
+  nodes: ExtractedGraph['nodes'];
+  edges: ExtractedGraph['edges'];
+  embeddingCache: Map<string, number[]>;
+}> {
+  // original LLM-generated id -> canonical (existing or kept) id
+  const idMap = new Map<string, string>();
+  // canonical id -> embedding (reused for Vectorize upsert to avoid double-computing)
+  const embeddingCache = new Map<string, number[]>();
+
+  for (const node of nodes) {
+    const textToEmbed = `${node.type}: ${node.name}. ${node.description ?? ''}`;
+    const embedding = await getEmbedding(env, textToEmbed);
+
+    // Query Vectorize for the closest existing nodes
+    const results = await env.VECTOR_INDEX.query(embedding, {
+      topK: 3,
+      returnMetadata: 'all',
+    });
+
+    // Accept the top match only if it's the same node type and above threshold
+    const match = results.matches.find(
+      (m) =>
+        m.score >= RESOLUTION_THRESHOLD &&
+        (m.metadata as Record<string, string> | null)?.type === node.type,
+    );
+
+    const canonicalId = match ? match.id : node.id;
+    idMap.set(node.id, canonicalId);
+
+    // Cache the embedding under the canonical ID (first one wins if multiple
+    // new nodes collapse to the same canonical)
+    if (!embeddingCache.has(canonicalId)) {
+      embeddingCache.set(canonicalId, embedding);
+    }
+  }
+
+  // Remap node IDs to canonical — deduplicate if multiple new nodes merged into one
+  const seen = new Set<string>();
+  const resolvedNodes = nodes
+    .map((n) => ({ ...n, id: idMap.get(n.id) ?? n.id }))
+    .filter((n) => {
+      if (seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
+
+  // Remap edge endpoints and drop any self-loops that merging may have created
+  const resolvedEdges = edges
+    .map((e) => ({
+      ...e,
+      source_id: idMap.get(e.source_id) ?? e.source_id,
+      target_id: idMap.get(e.target_id) ?? e.target_id,
+    }))
+    .filter((e) => e.source_id !== e.target_id);
+
+  const mergedCount = nodes.length - resolvedNodes.length;
+  if (mergedCount > 0) {
+    console.log(`[resolveEntities] merged ${mergedCount} node(s) into existing canonical nodes`);
+  }
+
+  return { nodes: resolvedNodes, edges: resolvedEdges, embeddingCache };
 }

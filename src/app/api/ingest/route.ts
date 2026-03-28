@@ -1,7 +1,7 @@
 // app/api/ingest/route.ts
 import { getEnv } from '@/lib/env';
 import { getDb, schema } from '@/db';
-import { extractEntities } from '@/lib/extract';
+import { extractEntities, resolveEntities } from '@/lib/extract';
 import { getEmbedding } from '@/lib/llm';
 import type { IngestRequest } from '@/lib/types';
 
@@ -63,6 +63,16 @@ export async function POST(request: Request) {
           send({ step: 'extracting', message: `Extracting entities with ${modelLabel}…` });
           const extracted = await extractEntities(env, doc.content, docId, doc.model, body.disable_fallback);
 
+          // 3.5 Resolve extracted entities against existing knowledge base nodes.
+          // Nodes that are sufficiently similar to an existing node of the same type
+          // are remapped to that node's canonical ID so both documents share it.
+          // This also pre-computes embeddings so step 4 can reuse them.
+          send({ step: 'resolving', message: `Resolving ${extracted.nodes.length} entities against knowledge base…` });
+          const { nodes: resolvedNodes, edges: resolvedEdges, embeddingCache } =
+            await resolveEntities(env, extracted.nodes, extracted.edges);
+          extracted.nodes = resolvedNodes;
+          extracted.edges = resolvedEdges;
+
           // 4. Insert nodes + embeddings
           let nodesInserted = 0;
           const totalNodes = extracted.nodes.length;
@@ -88,8 +98,9 @@ export async function POST(request: Request) {
                 },
               });
 
+            // Reuse the embedding computed during resolution — avoids a second LLM call
             const textToEmbed = `${node.type}: ${node.name}. ${node.description ?? ''}`;
-            const embedding = await getEmbedding(env, textToEmbed);
+            const embedding = embeddingCache.get(node.id) ?? await getEmbedding(env, textToEmbed);
 
             await env.VECTOR_INDEX.upsert([{
               id: node.id,
