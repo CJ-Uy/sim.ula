@@ -2,6 +2,7 @@
 import type { Env, ExtractedGraph } from './types';
 import { callLLM, getEmbedding } from './llm';
 import { getDb, schema } from '@/db';
+import { eq, ne, sql } from 'drizzle-orm';
 
 // Cosine similarity threshold above which two nodes are considered the same entity.
 // 0.87 avoids false positives between related-but-distinct concepts while catching
@@ -48,7 +49,7 @@ EDGE TYPE GUIDELINES:
 - "supported_by": stakeholder publicly supported the policy
 - "opposed_by": stakeholder publicly opposed or resisted the policy
 - "measured_by": outcome is quantified by a specific metric
-- "located_in": a stakeholder or event is in a specific location
+- "located_in": a stakeholder, event, or SUB-LOCATION is in a larger location. CRITICAL: Every barangay, district, street, or zone node MUST have a "located_in" edge pointing to "quezon-city". Example: if you create a node "barangay-tatalon", you MUST also create an edge { source_id: "barangay-tatalon", target_id: "quezon-city", relationship: "located_in" }.
 - "preceded": one policy came before and influenced another (temporal chain)
 - "related_to": generic connection when none of the above fit precisely
 
@@ -74,7 +75,8 @@ CRITICAL RULES:
 - Every edge must reference node IDs that exist EITHER in your nodes array OR in the existing nodes list above.
 - If the document mentions specific Philippine peso amounts, dates, percentages, or statistics, capture them in metadata.
 - Consider Philippine-specific context: barangay governance, informal economy, wet/dry seasons, flooding, jeepney/tricycle transport.
-- ALWAYS create edges connecting policies to their location (enacted_in), affected stakeholders (affected), and outcomes (resulted_in). A policy node with no edges is useless.`;
+- ALWAYS create edges connecting policies to their location (enacted_in), affected stakeholders (affected), and outcomes (resulted_in). A policy node with no edges is useless.
+- ALL policies in this dataset are about Quezon City. ALWAYS include the node "quezon-city" (type: "location") and create "enacted_in" edges from every policy to "quezon-city", even if the policy is also enacted in a specific sub-location.`;
 
 /**
  * Fetch existing nodes from the DB to give the LLM context about what's
@@ -83,11 +85,22 @@ CRITICAL RULES:
  */
 async function getExistingNodesContext(env: Env): Promise<string> {
   const db = getDb(env);
-  const existing = await db
+
+  // Fetch ALL location nodes (critical for graph connectivity) + up to 200 other nodes
+  const locations = await db
     .select({ id: schema.nodes.id, type: schema.nodes.type, name: schema.nodes.name })
     .from(schema.nodes)
+    .where(eq(schema.nodes.type, 'location'))
+    .all();
+
+  const others = await db
+    .select({ id: schema.nodes.id, type: schema.nodes.type, name: schema.nodes.name })
+    .from(schema.nodes)
+    .where(ne(schema.nodes.type, 'location'))
     .limit(200)
     .all();
+
+  const existing = [...locations, ...others];
 
   if (existing.length === 0) {
     return '(No existing nodes — this is the first document being ingested.)';
@@ -201,6 +214,38 @@ export async function extractEntities(
     if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON object found in LLM response');
     const parsed: ExtractedGraph = JSON.parse(result.slice(jsonStart, jsonEnd + 1));
 
+    // Sanitize LLM output: remap invalid types, filter out truly broken nodes
+    const VALID_TYPES = new Set(['policy', 'location', 'stakeholder', 'outcome', 'event', 'metric']);
+    const TYPE_REMAP: Record<string, string> = {
+      'Policy': 'policy', 'Location': 'location', 'Stakeholder': 'stakeholder',
+      'Outcome': 'outcome', 'Event': 'event', 'Metric': 'metric',
+      'Risk': 'outcome', 'risk': 'outcome', 'program': 'policy', 'law': 'policy',
+      'supporter': 'stakeholder', 'opposition': 'stakeholder',
+      'support-opposition': 'stakeholder', 'Support/Opposition': 'stakeholder',
+    };
+    parsed.nodes = (parsed.nodes ?? []).map((n) => {
+      if (typeof n.type === 'string' && TYPE_REMAP[n.type]) {
+        console.log(`[sanitize] Remapping node type: ${n.type} → ${TYPE_REMAP[n.type]} for ${n.id}`);
+        return { ...n, type: TYPE_REMAP[n.type] };
+      }
+      return n;
+    }).filter((n) => {
+      const valid = typeof n.id === 'string' && n.id.length > 0
+        && typeof n.type === 'string' && VALID_TYPES.has(n.type);
+      if (!valid) {
+        console.warn(`[sanitize] Dropping malformed node: id=${n.id}, type=${n.type}, name=${n.name}`);
+      }
+      return valid;
+    });
+    parsed.edges = (parsed.edges ?? []).filter((e) => {
+      const valid = typeof e.source_id === 'string' && e.source_id.length > 0
+        && typeof e.target_id === 'string' && e.target_id.length > 0;
+      if (!valid) {
+        console.warn(`[sanitize] Dropping malformed edge: source=${e.source_id}, target=${e.target_id}`);
+      }
+      return valid;
+    });
+
     // Tag all nodes with their source document
     parsed.nodes = parsed.nodes.map((n) => ({ ...n, source_doc_id: docId }));
 
@@ -312,4 +357,74 @@ export async function resolveEntities(
   }
 
   return { nodes: resolvedNodes, edges: resolvedEdges, embeddingCache };
+}
+
+// ── Post-extraction enrichment ───────────────────────────────────────
+
+/**
+ * Ensures all extracted nodes are properly connected to the graph.
+ * Since the entire dataset is QC-specific:
+ * - Every location → located_in → quezon-city
+ * - Every policy → enacted_in → quezon-city
+ * Returns the list of newly created edges.
+ */
+export async function enrichLocationEdges(
+  env: Env,
+  nodes: Array<{ id: string; type: string }>,
+): Promise<Array<{ source_id: string; target_id: string; relationship: string }>> {
+  const db = getDb(env);
+  const newEdges: Array<{ source_id: string; target_id: string; relationship: string }> = [];
+
+  // Ensure the quezon-city node exists
+  const qcExists = await db
+    .select({ id: schema.nodes.id })
+    .from(schema.nodes)
+    .where(eq(schema.nodes.id, 'quezon-city'))
+    .get();
+
+  if (!qcExists) {
+    await db.insert(schema.nodes).values({
+      id: 'quezon-city',
+      type: 'location',
+      name: 'Quezon City',
+      description: 'Quezon City, the largest city in Metro Manila, Philippines.',
+      metadata: JSON.stringify({ region: 'NCR', district_count: 6, barangay_count: 142 }),
+      source_doc_id: null,
+    }).onConflictDoNothing();
+  }
+
+  // Helper to create an edge if it doesn't already exist
+  async function ensureEdge(sourceId: string, targetId: string, relationship: string) {
+    const existing = await db
+      .select({ id: schema.edges.id })
+      .from(schema.edges)
+      .where(
+        sql`${schema.edges.source_id} = ${sourceId}
+          AND ${schema.edges.target_id} = ${targetId}
+          AND ${schema.edges.relationship} = ${relationship}`
+      )
+      .get();
+
+    if (!existing) {
+      await db.insert(schema.edges).values({
+        source_id: sourceId,
+        target_id: targetId,
+        relationship: relationship as typeof schema.edges.$inferInsert['relationship'],
+        metadata: JSON.stringify({ detail: 'Auto-enriched during ingestion' }),
+      });
+      newEdges.push({ source_id: sourceId, target_id: targetId, relationship });
+    }
+  }
+
+  // Connect ALL locations (not just prefix-matched) to quezon-city
+  for (const node of nodes) {
+    if (node.type === 'location' && node.id !== 'quezon-city') {
+      await ensureEdge(node.id, 'quezon-city', 'located_in');
+    }
+    if (node.type === 'policy') {
+      await ensureEdge(node.id, 'quezon-city', 'enacted_in');
+    }
+  }
+
+  return newEdges;
 }

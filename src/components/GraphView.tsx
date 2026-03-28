@@ -186,7 +186,7 @@ function EdgeCard({
 function GraphLegend() {
   const entries = Object.entries(NODE_COLORS) as [GraphNode["type"], string][];
   return (
-    <div className="absolute top-3 left-3 sm:bottom-4 sm:left-4 sm:top-auto border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-2 sm:px-3 sm:py-2.5 z-10">
+    <div className="border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-2 sm:px-3 sm:py-2.5">
       <p className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-light mb-1.5 sm:mb-2">
         Node Types
       </p>
@@ -216,6 +216,10 @@ interface GraphViewProps {
 interface FGNode extends GraphNode {
   x?: number;
   y?: number;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
 }
 interface FGLink extends GraphEdge {
   source: string | FGNode;
@@ -229,7 +233,10 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
   const [truncated, setTruncated] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
   const [showLabels, setShowLabels] = useState(true);
+  const [graphKey, setGraphKey] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const graphRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Fetch graph data
@@ -272,10 +279,12 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
   }, []);
 
   // react-force-graph expects { nodes: [...], links: [...] } with source/target fields
+  // graphKey in deps ensures reset creates fresh objects without stale x/y positions
   const fgData = useMemo(() => ({
     nodes: (graphData?.nodes ?? []).map((n) => ({ ...n })),
     links: (graphData?.edges ?? []).map((e) => ({ ...e, source: e.source_id, target: e.target_id })),
-  }), [graphData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [graphData, graphKey]);
 
   const nodeById = useMemo(() => {
     const m = new Map<string, GraphNode>();
@@ -307,6 +316,7 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     const isSelected = selection?.kind === "node" && selection.data.id === n.id;
     const x = n.x ?? 0;
     const y = n.y ?? 0;
+    if (!isFinite(x) || !isFinite(y)) return;
     const r = isSelected ? 3.5 : 2.5;
 
     // Outer glow
@@ -374,6 +384,10 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
     ctx.fill();
   }, []);
 
+  const handleResetGraph = useCallback(() => {
+    setGraphKey((k) => k + 1);
+  }, []);
+
   const linkColorFn = useCallback(() => LINK_COLOR, []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -415,6 +429,8 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
           )}
 
           <ForceGraph2D
+            key={graphKey}
+            ref={graphRef}
             backgroundColor={BG_COLOR}
             width={dimensions.width}
             height={dimensions.height}
@@ -433,15 +449,24 @@ export default function GraphView({ docs, docId }: GraphViewProps) {
             nodeLabel=""
           />
 
-          <GraphLegend />
-
-          {/* Label toggle */}
-          <button
-            onClick={() => setShowLabels((v) => !v)}
-            className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs text-muted hover:text-foreground active:text-foreground transition-colors"
-          >
-            {showLabels ? "Hide Labels" : "Show Labels"}
-          </button>
+          {/* Controls — top-right corner */}
+          <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 flex flex-col items-end gap-2">
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setShowLabels((v) => !v)}
+                className="border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs text-muted hover:text-foreground active:text-foreground transition-colors"
+              >
+                {showLabels ? "Hide Labels" : "Show Labels"}
+              </button>
+              <button
+                onClick={handleResetGraph}
+                className="border border-border bg-surface/90 backdrop-blur-sm px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs text-muted hover:text-foreground active:text-foreground transition-colors"
+              >
+                Reset Graph
+              </button>
+            </div>
+            <GraphLegend />
+          </div>
 
           {selection?.kind === "node" && (
             <NodeCard

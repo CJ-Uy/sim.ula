@@ -234,6 +234,77 @@ export default function DocumentDashboard({ onBack }: DocumentDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Backfill state ──────────────────────────────────────────────────
+  const [backfill, setBackfill] = useState<{
+    state: "idle" | "running" | "done" | "error";
+    message: string;
+    progress: number;
+    edgesCreated: number;
+  }>({ state: "idle", message: "", progress: 0, edgesCreated: 0 });
+
+  const handleBackfill = useCallback(async () => {
+    setBackfill({ state: "running", message: "Starting…", progress: 0, edgesCreated: 0 });
+
+    try {
+      const res = await fetch("/api/graph/backfill", { method: "POST" });
+      if (!res.ok || !res.body) throw new Error(`Server returned ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const event = JSON.parse(line.slice(6)) as {
+            step: string;
+            message?: string;
+            progress?: number;
+            edges_created?: number;
+          };
+
+          const progress = event.progress ?? 0;
+
+          if (event.step === "done") {
+            setBackfill({
+              state: "done",
+              message: event.message ?? "Complete",
+              progress: 100,
+              edgesCreated: event.edges_created ?? 0,
+            });
+          } else if (event.step === "error") {
+            setBackfill({
+              state: "error",
+              message: event.message ?? "Unknown error",
+              progress,
+              edgesCreated: event.edges_created ?? 0,
+            });
+          } else {
+            setBackfill({
+              state: "running",
+              message: event.message ?? event.step,
+              progress,
+              edgesCreated: event.edges_created ?? 0,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      setBackfill((prev) => ({
+        ...prev,
+        state: "error",
+        message: String(err),
+      }));
+    }
+  }, []);
+
   const fetchDocs = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -289,6 +360,54 @@ export default function DocumentDashboard({ onBack }: DocumentDashboardProps) {
         {/* Graph section */}
         <div className="h-[50vh] sm:h-[70vh] min-h-72 sm:min-h-125 border-b border-border-light">
           <GraphView docs={docs} />
+        </div>
+
+        {/* Backfill / Repair */}
+        <div className="px-4 pt-4 sm:px-6 sm:pt-6">
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Repair Graph Connections
+                </h3>
+                <p className="text-xs text-muted-light mt-0.5">
+                  Links all locations and policies to Quezon City, removes orphan edges
+                </p>
+              </div>
+              <button
+                onClick={handleBackfill}
+                disabled={backfill.state === "running"}
+                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+              >
+                {backfill.state === "running" ? "Running…" : "Run Backfill"}
+              </button>
+            </div>
+
+            {backfill.state !== "idle" && (
+              <div className="mt-3 space-y-1.5">
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      backfill.state === "error"
+                        ? "bg-red-500"
+                        : backfill.state === "done"
+                          ? "bg-green-500"
+                          : "bg-accent"
+                    }`}
+                    style={{ width: `${backfill.progress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-light">
+                  <span>{backfill.message}</span>
+                  {backfill.edgesCreated > 0 && (
+                    <span className="font-medium text-green-600">
+                      +{backfill.edgesCreated} edges
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Documents section */}
