@@ -1,4 +1,4 @@
-import type { FeatureCollection, Point } from "geojson";
+import type { FeatureCollection, Point, Polygon, Feature } from "geojson";
 
 // --- Types ---
 
@@ -24,43 +24,92 @@ export interface FloodPoint {
   riverDischarge: number;
 }
 
+// --- Grid response with cell step ---
+interface GridResponse {
+  type: "FeatureCollection";
+  features: Feature<Point>[];
+  cellStep?: number;
+}
+
+export interface GridData {
+  points: FeatureCollection<Point>;
+  cells: FeatureCollection<Polygon>;
+}
+
 // --- Grid fetch (one request per layer via /api/weather/grid) ---
 // Grid generation and caching now happen server-side; the browser makes a
 // single request per layer type instead of one request per grid point.
 
-const EMPTY_FC: FeatureCollection<Point> = { type: "FeatureCollection", features: [] };
+const EMPTY_FC_POINT: FeatureCollection<Point> = { type: "FeatureCollection", features: [] };
+const EMPTY_FC_POLY: FeatureCollection<Polygon> = { type: "FeatureCollection", features: [] };
+const EMPTY_GRID: GridData = { points: EMPTY_FC_POINT, cells: EMPTY_FC_POLY };
+
+/** Convert point features into square polygon cells for seamless fill rendering */
+function pointsToCells(
+  points: Feature<Point>[],
+  step: number
+): FeatureCollection<Polygon> {
+  const half = step / 2;
+  const features: Feature<Polygon>[] = points.map((f) => {
+    const [lng, lat] = f.geometry.coordinates;
+    return {
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [lng - half, lat - half],
+            [lng + half, lat - half],
+            [lng + half, lat + half],
+            [lng - half, lat + half],
+            [lng - half, lat - half],
+          ],
+        ],
+      },
+      properties: f.properties,
+    };
+  });
+  return { type: "FeatureCollection", features };
+}
 
 async function fetchGrid(
   bounds: { north: number; south: number; east: number; west: number },
   type: "heat" | "aqi" | "flood"
-): Promise<FeatureCollection<Point>> {
+): Promise<GridData> {
   const { north, south, east, west } = bounds;
   try {
     const res = await fetch(
       `/api/weather/grid?north=${north}&south=${south}&east=${east}&west=${west}&type=${type}`
     );
-    if (!res.ok) return EMPTY_FC;
-    return res.json();
+    if (!res.ok) return EMPTY_GRID;
+    const data: GridResponse = await res.json();
+    const step = data.cellStep ?? 0.01;
+    const pointsFc: FeatureCollection<Point> = {
+      type: "FeatureCollection",
+      features: data.features,
+    };
+    const cells = pointsToCells(data.features, step);
+    return { points: pointsFc, cells };
   } catch {
-    return EMPTY_FC;
+    return EMPTY_GRID;
   }
 }
 
 export function fetchHeatGrid(
   bounds: { north: number; south: number; east: number; west: number }
-): Promise<FeatureCollection<Point>> {
+): Promise<GridData> {
   return fetchGrid(bounds, "heat");
 }
 
 export function fetchAqiGrid(
   bounds: { north: number; south: number; east: number; west: number }
-): Promise<FeatureCollection<Point>> {
+): Promise<GridData> {
   return fetchGrid(bounds, "aqi");
 }
 
 export function fetchFloodGrid(
   bounds: { north: number; south: number; east: number; west: number }
-): Promise<FeatureCollection<Point>> {
+): Promise<GridData> {
   return fetchGrid(bounds, "flood");
 }
 

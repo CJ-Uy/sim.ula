@@ -12,9 +12,8 @@ import Map, {
   type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { FeatureCollection, Point } from "geojson";
 import type { LayerProps } from "react-map-gl/maplibre";
-import type { HeatmapLayerSpecification, CircleLayerSpecification } from "maplibre-gl";
+import type { FillLayerSpecification } from "maplibre-gl";
 import {
   fetchHeatGrid,
   fetchAqiGrid,
@@ -22,6 +21,7 @@ import {
   getHeatColor,
   getAqiColor,
   getAqiLabel,
+  type GridData,
 } from "@/data/openMeteo";
 
 interface PolicyMapProps {
@@ -52,164 +52,65 @@ interface HoverInfo {
   html: string;
 }
 
-const EMPTY_FC: FeatureCollection<Point> = { type: "FeatureCollection", features: [] };
+const EMPTY_GRID: GridData = {
+  points: { type: "FeatureCollection", features: [] },
+  cells: { type: "FeatureCollection", features: [] },
+};
 
-// --- Heatmap layer styles ---
+// --- Fill layer styles (square cells) ---
 
-// Heat index: continuous red/orange heatmap weighted by apparent temperature
-const heatHeatmapStyle: HeatmapLayerSpecification = {
-  id: "heat-heatmap",
-  type: "heatmap",
-  source: "heat-points",
+// Heat index: colored squares by apparent temperature
+const heatFillStyle: FillLayerSpecification = {
+  id: "heat-fill",
+  type: "fill",
+  source: "heat-cells",
   paint: {
-    "heatmap-weight": [
+    "fill-color": [
       "interpolate", ["linear"], ["get", "apparentTemperature"],
-      15, 0,
-      25, 0.3,
-      32, 0.6,
-      38, 0.85,
-      45, 1,
+      15, "rgba(163,230,53,0.5)",
+      25, "rgba(163,230,53,0.55)",
+      32, "rgba(251,191,36,0.6)",
+      35, "rgba(249,115,22,0.65)",
+      38, "rgba(239,68,68,0.7)",
+      45, "rgba(220,38,38,0.8)",
     ],
-    "heatmap-intensity": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 0.6,
-      13, 1.2,
-      16, 1.8,
-    ],
-    "heatmap-radius": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 15,
-      12, 30,
-      15, 50,
-    ],
-    "heatmap-color": [
-      "interpolate", ["linear"], ["heatmap-density"],
-      0, "rgba(0,0,0,0)",
-      0.15, "rgba(163,230,53,0.4)",
-      0.35, "rgba(251,191,36,0.55)",
-      0.55, "rgba(249,115,22,0.65)",
-      0.75, "rgba(239,68,68,0.75)",
-      1, "rgba(220,38,38,0.85)",
-    ],
-    "heatmap-opacity": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 0.7,
-      16, 0.5,
-    ],
+    "fill-opacity": 0.7,
   },
 };
 
-// Invisible circle layer on top for hover interactivity
-const heatCircleStyle: CircleLayerSpecification = {
-  id: "heat-points",
-  type: "circle",
-  source: "heat-points",
+// Air quality: colored squares by AQI
+const aqiFillStyle: FillLayerSpecification = {
+  id: "aqi-fill",
+  type: "fill",
+  source: "aqi-cells",
   paint: {
-    "circle-radius": 1,
-    "circle-opacity": 0,
-  },
-};
-
-// Air quality: purple/green heatmap weighted by AQI
-const aqiHeatmapStyle: HeatmapLayerSpecification = {
-  id: "aqi-heatmap",
-  type: "heatmap",
-  source: "aqi-points",
-  paint: {
-    "heatmap-weight": [
+    "fill-color": [
       "interpolate", ["linear"], ["get", "usAqi"],
-      0, 0.1,
-      50, 0.4,
-      100, 0.7,
-      200, 1,
+      0, "rgba(22,163,74,0.45)",
+      50, "rgba(22,163,74,0.5)",
+      100, "rgba(245,158,11,0.55)",
+      150, "rgba(249,115,22,0.6)",
+      200, "rgba(139,92,246,0.7)",
     ],
-    "heatmap-intensity": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 0.5,
-      13, 1,
-      16, 1.5,
-    ],
-    "heatmap-radius": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 20,
-      12, 35,
-      15, 55,
-    ],
-    "heatmap-color": [
-      "interpolate", ["linear"], ["heatmap-density"],
-      0, "rgba(0,0,0,0)",
-      0.2, "rgba(22,163,74,0.35)",
-      0.45, "rgba(245,158,11,0.5)",
-      0.7, "rgba(249,115,22,0.6)",
-      1, "rgba(139,92,246,0.75)",
-    ],
-    "heatmap-opacity": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 0.65,
-      16, 0.45,
-    ],
+    "fill-opacity": 0.65,
   },
 };
 
-const aqiCircleStyle: CircleLayerSpecification = {
-  id: "aqi-points",
-  type: "circle",
-  source: "aqi-points",
+// Flood risk: colored squares by river discharge
+const floodFillStyle: FillLayerSpecification = {
+  id: "flood-fill",
+  type: "fill",
+  source: "flood-cells",
   paint: {
-    "circle-radius": 1,
-    "circle-opacity": 0,
-  },
-};
-
-// Flood risk: blue heatmap weighted by river discharge
-const floodHeatmapStyle: HeatmapLayerSpecification = {
-  id: "flood-heatmap",
-  type: "heatmap",
-  source: "flood-points",
-  paint: {
-    "heatmap-weight": [
+    "fill-color": [
       "interpolate", ["linear"], ["get", "riverDischarge"],
-      0, 0,
-      10, 0.2,
-      50, 0.5,
-      200, 0.8,
-      1000, 1,
+      0, "rgba(191,219,254,0.45)",
+      10, "rgba(191,219,254,0.5)",
+      50, "rgba(96,165,250,0.55)",
+      200, "rgba(59,130,246,0.65)",
+      1000, "rgba(29,78,216,0.8)",
     ],
-    "heatmap-intensity": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 0.5,
-      13, 1,
-      16, 1.5,
-    ],
-    "heatmap-radius": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 18,
-      12, 32,
-      15, 50,
-    ],
-    "heatmap-color": [
-      "interpolate", ["linear"], ["heatmap-density"],
-      0, "rgba(0,0,0,0)",
-      0.2, "rgba(191,219,254,0.4)",
-      0.45, "rgba(96,165,250,0.55)",
-      0.7, "rgba(59,130,246,0.65)",
-      1, "rgba(29,78,216,0.8)",
-    ],
-    "heatmap-opacity": [
-      "interpolate", ["linear"], ["zoom"],
-      8, 0.65,
-      16, 0.45,
-    ],
-  },
-};
-
-const floodCircleStyle: CircleLayerSpecification = {
-  id: "flood-points",
-  type: "circle",
-  source: "flood-points",
-  paint: {
-    "circle-radius": 1,
-    "circle-opacity": 0,
+    "fill-opacity": 0.65,
   },
 };
 
@@ -223,10 +124,10 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const [userLocation, setUserLocation] = useState<{ lng: number; lat: number } | null>(null);
 
-  // Live data states
-  const [heatData, setHeatData] = useState<FeatureCollection<Point>>(EMPTY_FC);
-  const [aqiData, setAqiData] = useState<FeatureCollection<Point>>(EMPTY_FC);
-  const [floodData, setFloodData] = useState<FeatureCollection<Point>>(EMPTY_FC);
+  // Live data states — each has point data (for hover) and cell polygons (for rendering)
+  const [heatData, setHeatData] = useState<GridData>(EMPTY_GRID);
+  const [aqiData, setAqiData] = useState<GridData>(EMPTY_GRID);
+  const [floodData, setFloodData] = useState<GridData>(EMPTY_GRID);
   const [isLoading, setIsLoading] = useState(false);
 
   // Debounced fetch timer
@@ -249,9 +150,9 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
 
     try {
       const [heat, aqi, flood] = await Promise.all([
-        fetchHeatGrid(boundsObj).catch(() => EMPTY_FC),
-        fetchAqiGrid(boundsObj).catch(() => EMPTY_FC),
-        fetchFloodGrid(boundsObj).catch(() => EMPTY_FC),
+        fetchHeatGrid(boundsObj).catch(() => EMPTY_GRID),
+        fetchAqiGrid(boundsObj).catch(() => EMPTY_GRID),
+        fetchFloodGrid(boundsObj).catch(() => EMPTY_GRID),
       ]);
       setHeatData(heat);
       setAqiData(aqi);
@@ -368,30 +269,61 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
     [onLocationSelect]
   );
 
-  const handleMouseEnter = useCallback((e: MapLayerMouseEvent) => {
+  const handleMouseMove = useCallback((e: MapLayerMouseEvent) => {
     const map = mapRef.current;
-    if (map) map.getCanvas().style.cursor = "pointer";
+    if (!map) return;
 
-    const f = e.features?.[0];
-    if (!f) return;
+    // Query all interactive layers at the cursor point
+    const features = map.queryRenderedFeatures(e.point, {
+      layers: [
+        ...(activeLayers.has("heat") ? ["heat-fill"] : []),
+        ...(activeLayers.has("aqi") ? ["aqi-fill"] : []),
+        ...(activeLayers.has("flood") ? ["flood-fill"] : []),
+      ].filter((id) => {
+        try { return !!map.getLayer(id); } catch { return false; }
+      }),
+    });
 
-    const p = f.properties;
-    const { lng, lat } = e.lngLat;
-    let html = "";
-
-    if (f.layer.id === "heat-points") {
-      const temp = typeof p.apparentTemperature === "string" ? parseFloat(p.apparentTemperature) : p.apparentTemperature;
-      html = `<strong>Heat Index</strong><br/>Feels like: <span style="color:${getHeatColor(temp)};font-weight:600;">${temp}°C</span><br/>Actual: ${p.temperature}°C<br/>Humidity: ${p.humidity}%`;
-    } else if (f.layer.id === "aqi-points") {
-      const aqi = typeof p.usAqi === "string" ? parseInt(p.usAqi) : p.usAqi;
-      html = `<strong>Air Quality</strong><br/>AQI: <span style="color:${getAqiColor(aqi)};font-weight:600;">${aqi} (${getAqiLabel(aqi)})</span><br/>PM2.5: ${p.pm25} · PM10: ${p.pm10}`;
-    } else if (f.layer.id === "flood-points") {
-      const discharge = typeof p.riverDischarge === "string" ? parseFloat(p.riverDischarge) : p.riverDischarge;
-      html = `<strong>River Discharge</strong><br/>Flow: <span style="color:#3b82f6;font-weight:600;">${discharge.toFixed(1)} m³/s</span>`;
+    if (!features.length) {
+      map.getCanvas().style.cursor = "";
+      setHoverInfo(null);
+      return;
     }
 
-    if (html) setHoverInfo({ lng, lat, html });
-  }, []);
+    map.getCanvas().style.cursor = "pointer";
+
+    // Aggregate data from all layers at this point into one tooltip
+    const parts: string[] = [];
+
+    for (const f of features) {
+      const p = f.properties;
+      if (!p) continue;
+
+      if (f.layer.id === "heat-fill" && p.apparentTemperature != null) {
+        const temp = typeof p.apparentTemperature === "string" ? parseFloat(p.apparentTemperature) : p.apparentTemperature;
+        parts.push(
+          `<strong>Heat Index</strong><br/>Feels like: <span style="color:${getHeatColor(temp)};font-weight:600;">${temp}°C</span><br/>Actual: ${p.temperature}°C · Humidity: ${p.humidity}%`
+        );
+      } else if (f.layer.id === "aqi-fill" && p.usAqi != null) {
+        const aqi = typeof p.usAqi === "string" ? parseInt(p.usAqi) : p.usAqi;
+        parts.push(
+          `<strong>Air Quality</strong><br/>AQI: <span style="color:${getAqiColor(aqi)};font-weight:600;">${aqi} (${getAqiLabel(aqi)})</span><br/>PM2.5: ${p.pm25} · PM10: ${p.pm10}`
+        );
+      } else if (f.layer.id === "flood-fill" && p.riverDischarge != null) {
+        const discharge = typeof p.riverDischarge === "string" ? parseFloat(p.riverDischarge) : p.riverDischarge;
+        parts.push(
+          `<strong>River Discharge</strong><br/>Flow: <span style="color:#3b82f6;font-weight:600;">${discharge.toFixed(1)} m³/s</span>`
+        );
+      }
+    }
+
+    if (parts.length) {
+      const { lng, lat } = e.lngLat;
+      setHoverInfo({ lng, lat, html: parts.join('<hr style="margin:4px 0;border:0;border-top:1px solid #e5e5e5"/>') });
+    } else {
+      setHoverInfo(null);
+    }
+  }, [activeLayers]);
 
   const handleMouseLeave = useCallback(() => {
     const map = mapRef.current;
@@ -399,11 +331,11 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
     setHoverInfo(null);
   }, []);
 
-  // Invisible circle layers are interactive for hover tooltips
+  // Fill layers are interactive for hover tooltips
   const interactiveLayerIds = [
-    ...(activeLayers.has("heat") ? ["heat-points"] : []),
-    ...(activeLayers.has("aqi") ? ["aqi-points"] : []),
-    ...(activeLayers.has("flood") ? ["flood-points"] : []),
+    ...(activeLayers.has("heat") ? ["heat-fill"] : []),
+    ...(activeLayers.has("aqi") ? ["aqi-fill"] : []),
+    ...(activeLayers.has("flood") ? ["flood-fill"] : []),
   ];
 
   return (
@@ -415,39 +347,40 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
           latitude: 14.676,
           zoom: 12,
         }}
+        maxBounds={[
+          [120.96, 14.58], // SW corner of Quezon City
+          [121.13, 14.78], // NE corner of Quezon City
+        ]}
         style={{ width: "100%", height: "100%" }}
         mapStyle="https://tiles.openfreemap.org/styles/positron"
         onLoad={handleMapLoad}
         onMoveEnd={handleMoveEnd}
         onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
+        onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         interactiveLayerIds={interactiveLayerIds}
         attributionControl={false}
       >
         <NavigationControl position="bottom-right" showCompass={false} />
 
-        {/* Heat index — continuous heatmap */}
+        {/* Heat index — square cell fill */}
         {activeLayers.has("heat") && (
-          <Source id="heat-points" type="geojson" data={heatData}>
-            <Layer {...(heatHeatmapStyle as unknown as LayerProps)} />
-            <Layer {...(heatCircleStyle as unknown as LayerProps)} />
+          <Source id="heat-cells" type="geojson" data={heatData.cells}>
+            <Layer {...(heatFillStyle as unknown as LayerProps)} />
           </Source>
         )}
 
-        {/* Air quality — continuous heatmap */}
+        {/* Air quality — square cell fill */}
         {activeLayers.has("aqi") && (
-          <Source id="aqi-points" type="geojson" data={aqiData}>
-            <Layer {...(aqiHeatmapStyle as unknown as LayerProps)} />
-            <Layer {...(aqiCircleStyle as unknown as LayerProps)} />
+          <Source id="aqi-cells" type="geojson" data={aqiData.cells}>
+            <Layer {...(aqiFillStyle as unknown as LayerProps)} />
           </Source>
         )}
 
-        {/* Flood risk — continuous heatmap */}
+        {/* Flood risk — square cell fill */}
         {activeLayers.has("flood") && (
-          <Source id="flood-points" type="geojson" data={floodData}>
-            <Layer {...(floodHeatmapStyle as unknown as LayerProps)} />
-            <Layer {...(floodCircleStyle as unknown as LayerProps)} />
+          <Source id="flood-cells" type="geojson" data={floodData.cells}>
+            <Layer {...(floodFillStyle as unknown as LayerProps)} />
           </Source>
         )}
 

@@ -56,6 +56,13 @@ export async function GET(request: Request) {
   const step = type === 'heat' ? 0.01 : type === 'aqi' ? 0.015 : 0.02;
   const points = generateGrid(north, south, east, west, step);
 
+  // Compute effective step (same logic as generateGrid) so client can size cells
+  const latRange = north - south;
+  const lngRange = east - west;
+  const estCount = (latRange / step) * (lngRange / step);
+  const effectiveStep =
+    estCount > MAX_POINTS ? step * Math.sqrt(estCount / MAX_POINTS) : step;
+
   const results = await Promise.all(
     points.map((p) => getCachedWeather(env, p.lat, p.lng, type!).catch(() => null))
   );
@@ -113,7 +120,12 @@ export async function GET(request: Request) {
   });
 
   return Response.json(
-    { type: 'FeatureCollection', features } satisfies FeatureCollection<Point>,
+    {
+      type: 'FeatureCollection',
+      features,
+      // Custom property: grid cell half-size so the client can build square polygons
+      cellStep: effectiveStep,
+    },
     { headers: { 'Cache-Control': 'public, max-age=3600' } }
   );
 }
