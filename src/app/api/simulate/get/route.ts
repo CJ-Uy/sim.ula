@@ -140,7 +140,7 @@ function adaptFromLegacy(raw: AnyObj, envelope: AnyObj): AnyObj {
     location_context: `Simulated for ${envelope.location ?? 'the target area'}. ${uniqueGroups.length ? `Key affected groups: ${uniqueGroups.join(', ')}.` : ''}`,
     historical_precedents: [],
     simulation_timeline: timeline,
-    impact_scores,
+    impact_scores: impact_scores as SimulationResult['impact_scores'],
     persona_reactions: {
       supporter: {
         profile: uniqueGroups[0] ?? 'Community members',
