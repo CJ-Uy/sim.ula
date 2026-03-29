@@ -204,3 +204,81 @@ export async function r2Get(key: string): Promise<string | null> {
 
   return res.text();
 }
+
+/**
+ * Delete an object from R2 using the S3-compatible API.
+ */
+export async function r2Delete(key: string): Promise<void> {
+  const endpoint = `https://${ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  const url = `${endpoint}/${R2_BUCKET}/${key}`;
+  const now = new Date();
+
+  const dateStamp = now.toISOString().replace(/[-:]/g, '').slice(0, 8);
+  const amzDate = dateStamp + 'T' + now.toISOString().replace(/[-:]/g, '').slice(9, 15) + 'Z';
+  const region = 'auto';
+  const service = 's3';
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+
+  const encoder = new TextEncoder();
+
+  async function hmacSha256(key: ArrayBuffer | Uint8Array, message: string): Promise<ArrayBuffer> {
+    const raw = key instanceof ArrayBuffer ? key : key.buffer.slice(key.byteOffset, key.byteOffset + key.byteLength);
+    const cryptoKey = await crypto.subtle.importKey('raw', raw as ArrayBuffer, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
+  }
+
+  async function sha256(data: string): Promise<string> {
+    const hash = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  const payloadHash = await sha256('');
+
+  const canonicalHeaders = [
+    `host:${ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    `x-amz-content-sha256:${payloadHash}`,
+    `x-amz-date:${amzDate}`,
+  ].join('\n') + '\n';
+
+  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+
+  const canonicalRequest = [
+    'DELETE',
+    `/${R2_BUCKET}/${key}`,
+    '',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    await sha256(canonicalRequest),
+  ].join('\n');
+
+  const kDate = await hmacSha256(encoder.encode('AWS4' + R2_SECRET_ACCESS_KEY), dateStamp);
+  const kRegion = await hmacSha256(kDate, region);
+  const kService = await hmacSha256(kRegion, service);
+  const kSigning = await hmacSha256(kService, 'aws4_request');
+
+  const signatureBuffer = await hmacSha256(kSigning, stringToSign);
+  const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  const authorization = `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': authorization,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
+    },
+  });
+
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text();
+    throw new Error(`R2 DELETE ${res.status}: ${text.slice(0, 200)}`);
+  }
+}

@@ -65,7 +65,23 @@ export default function SimulatePage() {
   };
 
   const handleSimulationComplete = useCallback(
-    (result: SimulationResult & { simulation_id: string }) => {
+    async (result: SimulationResult & { simulation_id: string }) => {
+      // Save to R2/D1 first so the results page can always find it
+      try {
+        await fetch("/api/simulate/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            simulation_id: result.simulation_id,
+            policy: formData.description,
+            location: formData.location || "Quezon City",
+            result,
+          }),
+        });
+      } catch {
+        // Best-effort — sessionStorage is the primary hand-off
+      }
+
       sessionStorage.setItem(
         "pendingSimulation",
         JSON.stringify({ result, policy: formData.description, location: formData.location, formData })

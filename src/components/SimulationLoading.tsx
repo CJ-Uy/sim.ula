@@ -30,6 +30,10 @@ export default function SimulationLoading({
   const formDataRef = useRef(formData);
   const onCompleteRef = useRef(onComplete);
 
+  // Keep refs in sync so the async callback always uses the latest closure
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+
   const displayPolicy =
     formData.description.length > 110
       ? formData.description.slice(0, 110) + "\u2026"
