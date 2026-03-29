@@ -81,7 +81,7 @@ function adaptFromLegacy(raw: AnyObj, envelope: AnyObj): AnyObj {
     'Human-Centered': 'human_centered',
   };
 
-  const impact_scores: { economic: { score: number; reasoning: string }; environmental: { score: number; reasoning: string }; social: { score: number; reasoning: string }; human_centered: { score: number; reasoning: string } } = {} as never;
+  const impact_scores: Record<string, { score: number; reasoning: string }> = {};
   for (const cat of categories) {
     const key = keyMap[cat];
     const pos = positive.find(p => p.category === cat);
