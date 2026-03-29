@@ -93,7 +93,7 @@ export default function LandingPage() {
           {/* Title */}
           <div className="text-center pb-4">
             <h1
-              className="font-serif text-[3.5rem] sm:text-[5.5rem] font-black leading-none tracking-tight text-foreground uppercase"
+              className="font-serif text-[3.5rem] sm:text-[5.5rem] font-black leading-none tracking-tight text-foreground"
               style={{ letterSpacing: "-0.02em" }}
             >
               sim.ula
@@ -297,31 +297,6 @@ export default function LandingPage() {
                 </Link>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── STATS BAR ── */}
-      <div
-        className="border-t-[3px] border-foreground bg-foreground px-6 py-5"
-        style={{ animation: "slide-up 1100ms ease both" }}
-      >
-        <div className="mx-auto max-w-6xl">
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-            {STATS.map((stat, i) => (
-              <div
-                key={stat.label}
-                className="text-center"
-                style={{ animation: `slide-up ${1100 + i * 70}ms ease both` }}
-              >
-                <p className="font-serif text-[1.75rem] font-black leading-none text-background">
-                  {stat.value}
-                </p>
-                <p className="mt-1 text-[9px] uppercase tracking-[0.2em] text-background/50">
-                  {stat.label}
-                </p>
-              </div>
-            ))}
           </div>
         </div>
       </div>
