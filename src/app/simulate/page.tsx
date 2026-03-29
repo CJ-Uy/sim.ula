@@ -113,6 +113,7 @@ export default function SimulatePage() {
               selectedLat={selectedLat}
               selectedLng={selectedLng}
               onLocationSearch={handleLocationSearch}
+              initialDescription={formData.description}
             />
           </div>
         </div>

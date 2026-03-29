@@ -31,6 +31,7 @@ interface PolicyInputProps {
   selectedLat?: number;
   selectedLng?: number;
   onLocationSearch?: (location: string, lat: number, lng: number) => void;
+  initialDescription?: string;
 }
 
 function FieldLabel({
@@ -56,11 +57,12 @@ export default function PolicyInput({
   selectedLat,
   selectedLng,
   onLocationSearch,
+  initialDescription,
 }: PolicyInputProps) {
   const [policyType, setPolicyType] = useState("");
   const [policyTypes, setPolicyTypes] = useState<string[]>([]);
   const [category, setCategory] = useState("");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [agency, setAgency] = useState("");
@@ -68,6 +70,11 @@ export default function PolicyInput({
   const [locationScope, setLocationScope] = useState<LocationScope>("citywide");
   const [noEndDate, setNoEndDate] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+
+  // Sync description when refine pre-fills it
+  useEffect(() => {
+    if (initialDescription) setDescription(initialDescription);
+  }, [initialDescription]);
 
   // Sync when map click updates selectedLocation (only in specific mode)
   useEffect(() => {
@@ -113,7 +120,7 @@ export default function PolicyInput({
     policyType !== "" && category !== "" && description.length > 20;
 
   return (
-    <div className="px-6 py-8" style={{ animation: "fade-in 300ms ease" }}>
+    <div className="overflow-x-hidden px-6 py-8" style={{ animation: "fade-in 300ms ease" }}>
       {/* Page heading */}
       <div className="mb-8">
         <div className="flex">
@@ -209,7 +216,7 @@ export default function PolicyInput({
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent"
+                className="w-full min-w-0 border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent"
               />
             </div>
             <div>
@@ -233,7 +240,7 @@ export default function PolicyInput({
                 value={endDate}
                 disabled={noEndDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className={`w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent ${noEndDate ? "cursor-not-allowed opacity-40" : ""}`}
+                className={`w-full min-w-0 border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent ${noEndDate ? "cursor-not-allowed opacity-40" : ""}`}
               />
             </div>
           </div>

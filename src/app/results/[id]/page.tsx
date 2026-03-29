@@ -117,7 +117,7 @@ export default function ResultsPage() {
   }, [id]);
 
   const handleReset = () => {
-    router.push("/");
+    router.push("/simulate");
   };
 
   const handleRefine = (refinedDescription: string) => {
@@ -125,7 +125,7 @@ export default function ResultsPage() {
       "refineSimulation",
       JSON.stringify({ description: refinedDescription, location: formData.location })
     );
-    router.push("/");
+    router.push("/simulate");
   };
 
   if (loading) {
