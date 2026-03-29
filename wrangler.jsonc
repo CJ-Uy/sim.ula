@@ -78,7 +78,7 @@
     "OLLAMA_URL": "https://ollama.cjuy.dev",
     "SEARXNG_URL": "https://searxng.cjuy.dev",
     "DEBERTA_URL": "https://deberta.cjuy.dev",
-    "OLLAMA_MODEL": "qwen3:8b",
+    "OLLAMA_MODEL": "qwen2.5:7b",
     "EMBED_MODEL": "nomic-embed-text",
     "OLLAMA_TIMEOUT_MS": "120000",
   },

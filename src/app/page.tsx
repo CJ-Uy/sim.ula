@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import PolicyInput from "@/components/PolicyInput";
 import type { PolicyFormData } from "@/components/PolicyInput";
 import PolicyMap from "@/components/PolicyMap";
 import SimulationLoading from "@/components/SimulationLoading";
-import SimulationResults from "@/components/SimulationResults";
 import Header from "@/components/Header";
 import type { SimulationResult } from "@/lib/types";
 
-type Screen = "input" | "loading" | "results";
+type Screen = "input" | "loading";
 
 const INITIAL_FORM: PolicyFormData = {
   policyType: "",
@@ -22,23 +22,21 @@ const INITIAL_FORM: PolicyFormData = {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [screen, setScreen] = useState<Screen>("input");
   const [formData, setFormData] = useState<PolicyFormData>(INITIAL_FORM);
-  const [simulationResult, setSimulationResult] = useState<(SimulationResult & { simulation_id: string }) | null>(null);
   const [selectedLocation, setSelectedLocation] = useState("");
   const [selectedLat, setSelectedLat] = useState<number | undefined>();
   const [selectedLng, setSelectedLng] = useState<number | undefined>();
   const [mapTarget, setMapTarget] = useState<{ lng: number; lat: number } | null>(null);
 
-  // Pick up a simulation selected from the /policies page
+  // Pick up a refine request coming back from the results page
   useEffect(() => {
-    const pending = sessionStorage.getItem("pendingSimulation");
-    if (pending) {
-      sessionStorage.removeItem("pendingSimulation");
-      const { result, policy, location } = JSON.parse(pending);
-      setFormData((prev) => ({ ...prev, description: policy, location }));
-      setSimulationResult(result);
-      setScreen("results");
+    const refine = sessionStorage.getItem("refineSimulation");
+    if (refine) {
+      sessionStorage.removeItem("refineSimulation");
+      const { description, location } = JSON.parse(refine);
+      setFormData((prev) => ({ ...prev, description, location }));
     }
   }, []);
 
@@ -67,25 +65,12 @@ export default function Home() {
   };
 
   const handleSimulationComplete = useCallback((result: SimulationResult & { simulation_id: string }) => {
-    setSimulationResult(result);
-    setScreen("results");
-  }, []);
-
-  const handleReset = () => {
-    setFormData(INITIAL_FORM);
-    setSimulationResult(null);
-    setSelectedLocation("");
-    setSelectedLat(undefined);
-    setSelectedLng(undefined);
-    setMapTarget(null);
-    setScreen("input");
-  };
-
-  const handleRefine = useCallback((refinedDescription: string) => {
-    setFormData((prev) => ({ ...prev, description: refinedDescription }));
-    setSimulationResult(null);
-    setScreen("loading");
-  }, []);
+    sessionStorage.setItem(
+      "pendingSimulation",
+      JSON.stringify({ result, policy: formData.description, location: formData.location, formData })
+    );
+    router.push(`/results/${result.simulation_id}`);
+  }, [formData, router]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -117,17 +102,6 @@ export default function Home() {
             formData={formData}
             onComplete={handleSimulationComplete}
             onError={() => setScreen("input")}
-          />
-        </main>
-      )}
-
-      {screen === "results" && simulationResult && (
-        <main className="min-h-0 w-full flex-1 overflow-y-auto">
-          <SimulationResults
-            formData={formData}
-            result={simulationResult}
-            onReset={handleReset}
-            onRefine={handleRefine}
           />
         </main>
       )}

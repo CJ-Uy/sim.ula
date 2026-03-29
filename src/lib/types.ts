@@ -120,6 +120,33 @@ export interface ExtractedGraph {
   }>;
 }
 
+// ── Feasibility ───────────────────────────────────────────────────────────────
+
+export interface FeasibilityPrecedentChain {
+  city_name: string;
+  city_id: string;
+  policy_name: string;
+  outcome_summary: string;
+  chain: Array<{ from: string; to: string; weight: number; basis: string }>;
+  transferability_score: number; // product of edge weights along chain
+  key_adaptations: string[];     // what needs to change for QC context
+}
+
+export interface FeasibilityResult {
+  overall_score: number;   // 0–100
+  overall_label: string;   // "Not Feasible" | "Challenging" | "Feasible" | "Highly Feasible"
+  reasoning: string;       // chain-of-thought narrative
+  precedent_chains: FeasibilityPrecedentChain[];
+  stakeholder_readiness: Array<{
+    stakeholder: string;
+    readiness: 'ready' | 'cautious' | 'resistant';
+    key_concern: string;
+  }>;
+  critical_success_factors: string[];
+  blocking_factors: string[];
+  estimated_feasibility_horizon: string;
+}
+
 // ── Simulation ────────────────────────────────────────────────────────────────
 
 export interface SimulateRequest {
@@ -190,6 +217,8 @@ export interface SimulationResult {
 
   confidence: 'low' | 'medium' | 'high';
   confidence_reasoning: string;
+
+  feasibility?: FeasibilityResult;
 }
 
 // ── Scraping ─────────────────────────────────────────────────────────────────

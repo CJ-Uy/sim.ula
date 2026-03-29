@@ -17,7 +17,7 @@ export default function PoliciesPage() {
       "pendingSimulation",
       JSON.stringify({ result, policy, location })
     );
-    router.push("/");
+    router.push(`/results/${result.simulation_id}`);
   };
 
   return (

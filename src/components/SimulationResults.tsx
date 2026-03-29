@@ -422,7 +422,7 @@ export default function SimulationResults({
               simulation.
             </p>
             <div className="space-y-3 sm:space-y-4">
-              {result.historical_precedents.map((p, i) => (
+              {(result.historical_precedents ?? []).map((p, i) => (
                 <div
                   key={i}
                   className="border-l-2 border-accent/40 bg-surface/50 py-3 pl-4 pr-3 sm:pl-5 sm:pr-4"
@@ -515,7 +515,7 @@ export default function SimulationResults({
       <section className="py-8 sm:py-10">
         <SectionLabel>Projected Timeline</SectionLabel>
         <div className="space-y-5 sm:space-y-6">
-          {result.simulation_timeline.map((m, i) => (
+          {(result.simulation_timeline ?? []).map((m, i) => (
             <div key={i} className="flex gap-3 sm:gap-4">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center bg-foreground text-xs font-medium text-background">
                 {i + 1}
@@ -564,13 +564,204 @@ export default function SimulationResults({
 
       <hr className="border-border-light" />
 
-      {/* ── Section G: Risks & Mitigations ────────────────────── */}
+      {/* ── Section G: Feasibility Assessment ────────────────── */}
+      {result.feasibility && (
+        <>
+          <section className="py-8 sm:py-10">
+            <SectionLabel>Feasibility Assessment</SectionLabel>
+
+            {/* Score + label header */}
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <div
+                className="flex h-14 w-14 shrink-0 items-center justify-center text-xl font-bold"
+                style={{
+                  background:
+                    result.feasibility.overall_score >= 76
+                      ? "rgba(20,184,166,0.12)"
+                      : result.feasibility.overall_score >= 51
+                      ? "rgba(37,99,235,0.10)"
+                      : result.feasibility.overall_score >= 26
+                      ? "rgba(217,119,6,0.12)"
+                      : "rgba(220,38,38,0.10)",
+                  color:
+                    result.feasibility.overall_score >= 76
+                      ? "#0d9488"
+                      : result.feasibility.overall_score >= 51
+                      ? "#2563EB"
+                      : result.feasibility.overall_score >= 26
+                      ? "#D97706"
+                      : "#DC2626",
+                }}
+              >
+                {result.feasibility.overall_score}
+              </div>
+              <div>
+                <p className="text-base font-semibold">{result.feasibility.overall_label}</p>
+                <p className="text-xs text-muted-light">out of 100</p>
+              </div>
+              {result.feasibility.estimated_feasibility_horizon && (
+                <span className="ml-auto text-xs text-muted border border-border-light px-2 py-1 self-start">
+                  {result.feasibility.estimated_feasibility_horizon}
+                </span>
+              )}
+            </div>
+
+            {/* Chain-of-thought reasoning */}
+            <p className="mb-6 text-sm leading-relaxed text-muted">
+              {result.feasibility.reasoning}
+            </p>
+
+            {/* Precedent chains */}
+            {result.feasibility.precedent_chains?.length > 0 && (
+              <div className="mb-6 space-y-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground/50">
+                  Precedent Transfer Chains
+                </p>
+                {result.feasibility.precedent_chains.map((pc, i) => (
+                  <div key={i} className="border border-border-light p-4">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">{pc.policy_name}</p>
+                      <span className="text-[11px] text-muted-light border border-border-light px-2 py-0.5">
+                        {pc.city_name}
+                      </span>
+                    </div>
+                    {pc.outcome_summary && (
+                      <p className="mb-3 text-xs text-muted">{pc.outcome_summary}</p>
+                    )}
+
+                    {/* Chain visualization */}
+                    {pc.chain?.length > 0 && (
+                      <div className="mb-3 flex flex-wrap items-center gap-1 text-xs">
+                        <span className="px-2 py-0.5 bg-accent/10 text-accent font-medium">
+                          {pc.city_name}
+                        </span>
+                        {pc.chain.map((hop, j) => (
+                          <span key={j} className="flex items-center gap-1">
+                            <span className="text-muted-light">
+                              →
+                              <span className="mx-1 text-[10px] text-muted-light">
+                                {(hop.weight * 100).toFixed(0)}%{" "}
+                                <span className="italic">{hop.basis}</span>
+                              </span>
+                            </span>
+                            <span className="px-2 py-0.5 bg-surface border border-border-light">
+                              {hop.to}
+                            </span>
+                          </span>
+                        ))}
+                        <span className="ml-1 text-[10px] text-muted-light">
+                          → transferability:{" "}
+                          <span className="font-semibold text-foreground/70">
+                            {(pc.transferability_score * 100).toFixed(0)}%
+                          </span>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Key adaptations */}
+                    {pc.key_adaptations?.length > 0 && (
+                      <div>
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+                          Required Adaptations
+                        </p>
+                        <ul className="space-y-0.5">
+                          {pc.key_adaptations.map((a, k) => (
+                            <li key={k} className="flex gap-2 text-xs text-muted">
+                              <span className="shrink-0 text-accent">›</span>
+                              {a}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Stakeholder readiness */}
+            {result.feasibility.stakeholder_readiness?.length > 0 && (
+              <div className="mb-6">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-foreground/50">
+                  Stakeholder Readiness
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {result.feasibility.stakeholder_readiness.map((sr, i) => (
+                    <div key={i} className="border border-border-light p-3">
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{
+                            background:
+                              sr.readiness === "ready"
+                                ? "#16A34A"
+                                : sr.readiness === "cautious"
+                                ? "#D97706"
+                                : "#DC2626",
+                          }}
+                        />
+                        <p className="text-xs font-semibold capitalize">{sr.readiness}</p>
+                      </div>
+                      <p className="text-xs font-medium text-foreground/80">{sr.stakeholder}</p>
+                      <p className="mt-1 text-xs text-muted">{sr.key_concern}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Success factors + blocking factors */}
+            {(result.feasibility.critical_success_factors?.length > 0 ||
+              result.feasibility.blocking_factors?.length > 0) && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {result.feasibility.critical_success_factors?.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/50">
+                      Critical Success Factors
+                    </p>
+                    <ul className="space-y-1.5">
+                      {result.feasibility.critical_success_factors.map((f, i) => (
+                        <li key={i} className="flex gap-2 text-xs text-muted">
+                          <span className="shrink-0 font-bold" style={{ color: "#16A34A" }}>
+                            ✓
+                          </span>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {result.feasibility.blocking_factors?.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/50">
+                      Blocking Factors
+                    </p>
+                    <ul className="space-y-1.5">
+                      {result.feasibility.blocking_factors.map((f, i) => (
+                        <li key={i} className="flex gap-2 text-xs text-muted">
+                          <span className="shrink-0 font-bold" style={{ color: "#DC2626" }}>
+                            ✗
+                          </span>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+          <hr className="border-border-light" />
+        </>
+      )}
+
+      {/* ── Section H: Risks & Mitigations ────────────────────── */}
       {result.risks?.length > 0 && (
         <>
           <section className="py-8 sm:py-10">
             <SectionLabel>Risks & Mitigations</SectionLabel>
             <div className="space-y-3 sm:space-y-4">
-              {result.risks.map((r, i) => (
+              {(result.risks ?? []).map((r, i) => (
                 <div key={i} className="border border-border-light bg-surface/50 p-3 sm:p-4">
                   <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                     <p className="text-sm font-semibold">{r.risk}</p>
@@ -600,7 +791,7 @@ export default function SimulationResults({
           <section className="py-8 sm:py-10">
             <SectionLabel>Recommendations</SectionLabel>
             <div className="space-y-3">
-              {result.recommendations.map((rec, i) => (
+              {(result.recommendations ?? []).map((rec, i) => (
                 <div key={i} className="flex gap-3">
                   <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center bg-accent/10 text-[11px] font-semibold text-accent">
                     {i + 1}
