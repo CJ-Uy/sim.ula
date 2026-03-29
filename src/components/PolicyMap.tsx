@@ -259,7 +259,7 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
           }
         }
         if (parts.length) {
-          setHoverInfo({ lng, lat, html: parts.join('<hr style="margin:4px 0;border:0;border-top:1px solid #e5e5e5"/>') });
+          setHoverInfo({ lng, lat, html: parts.join('<hr style="margin:5px 0;border:0;border-top:1px solid #E7E5E4"/>') });
         }
       }
 
@@ -364,7 +364,7 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
 
     if (parts.length) {
       const { lng, lat } = e.lngLat;
-      setHoverInfo({ lng, lat, html: parts.join('<hr style="margin:4px 0;border:0;border-top:1px solid #e5e5e5"/>') });
+      setHoverInfo({ lng, lat, html: parts.join('<hr style="margin:5px 0;border:0;border-top:1px solid #E7E5E4"/>') });
     } else {
       setHoverInfo(null);
     }
@@ -511,52 +511,68 @@ export default function PolicyMap({ onLocationSelect, flyTo }: PolicyMapProps) {
           </Popup>
         )}
 
-        {/* Hover popup */}
-        {hoverInfo && (
-          <Popup
-            longitude={hoverInfo.lng}
-            latitude={hoverInfo.lat}
-            offset={10}
-            closeButton={false}
-            closeOnClick={false}
-            maxWidth="220px"
-          >
-            <div
-              style={{ fontSize: 12, lineHeight: 1.5 }}
-              dangerouslySetInnerHTML={{ __html: hoverInfo.html }}
-            />
-          </Popup>
-        )}
       </Map>
 
-      {/* Layer toggle control — compact on mobile */}
-      <div className="absolute top-3 left-3 z-10 border border-border bg-surface p-2 sm:p-3">
-        <p className="mb-1.5 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-foreground/60">
-          Layers
-        </p>
-        <div className="flex gap-2 sm:block sm:space-y-1.5">
-          {LAYERS_CONFIG.map((layer) => (
-            <label
-              key={layer.id}
-              className="flex cursor-pointer items-center gap-1.5 sm:gap-2 text-[11px] sm:text-[13px]"
-            >
-              <input
-                type="checkbox"
-                checked={activeLayers.has(layer.id)}
-                onChange={() => toggleLayer(layer.id)}
-                className="accent-accent h-3 w-3 sm:h-4 sm:w-4"
-              />
+      {/* Left-side control stack */}
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5" style={{ width: 168 }}>
+
+        {/* Layer toggles */}
+        <div className="border border-border bg-surface px-3 py-2.5">
+          <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-foreground/50">
+            Layers
+          </p>
+          <div className="space-y-1.5">
+            {LAYERS_CONFIG.map((layer) => (
+              <label
+                key={layer.id}
+                className="flex cursor-pointer items-center gap-2 text-[12px] text-foreground/80 hover:text-foreground transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={activeLayers.has(layer.id)}
+                  onChange={() => toggleLayer(layer.id)}
+                  className="accent-accent h-3 w-3 shrink-0"
+                />
+                <span
+                  className="inline-block h-2 w-2 shrink-0"
+                  style={{ backgroundColor: layer.color }}
+                />
+                {layer.label}
+              </label>
+            ))}
+          </div>
+          {isLoading && (
+            <div className="mt-2 flex items-center gap-1.5">
               <span
-                className="inline-block h-2 w-2 sm:h-2.5 sm:w-2.5"
-                style={{ backgroundColor: layer.color }}
+                className="h-1.5 w-1.5 rounded-full bg-accent shrink-0"
+                style={{ animation: "pulse-dot 1.2s ease-in-out infinite" }}
               />
-              <span className="hidden sm:inline">{layer.label}</span>
-            </label>
-          ))}
+              <p className="text-[9px] text-muted-light">Fetching…</p>
+            </div>
+          )}
         </div>
-        {isLoading && (
-          <p className="mt-1.5 text-[10px] text-muted-light">Loading...</p>
-        )}
+
+        {/* Hover data panel — fixed position, updates with cursor */}
+        <div
+          className="border border-border bg-surface px-3 py-2.5 transition-opacity duration-150"
+          style={{ opacity: hoverInfo ? 1 : 0.6, minHeight: 64 }}
+        >
+          <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-foreground/50">
+            Cursor Data
+          </p>
+          {hoverInfo ? (
+            <div
+              className="text-[11px] leading-snug text-foreground"
+              style={{ fontFamily: "inherit" }}
+              dangerouslySetInnerHTML={{ __html: hoverInfo.html }}
+            />
+          ) : (
+            <p className="text-[11px] italic text-muted-light">
+              Hover the map to inspect
+            </p>
+          )}
+        </div>
+
       </div>
     </div>
   );

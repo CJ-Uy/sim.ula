@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 const navItems = [
+  { label: "Simulate", href: "/simulate", primary: true },
   { label: "Your Policies", href: "/policies" },
   { label: "Knowledge Base", href: "/knowledge" },
   { label: "Scrape", href: "/scrape" },
@@ -19,6 +21,7 @@ export default function Header({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -51,16 +54,38 @@ export default function Header({
           {!hideNav && (
             <>
               {/* Desktop nav */}
-              <div className="hidden sm:flex items-center gap-3">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className="text-xs font-medium text-muted hover:text-foreground border border-border px-3 py-1.5 transition-colors hover:border-border-light"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+              <div className="hidden sm:flex items-center gap-2">
+                {navItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  if (item.primary) {
+                    return (
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 transition-colors border ${
+                          isActive
+                            ? "bg-accent border-accent text-white"
+                            : "bg-foreground border-foreground text-background hover:bg-accent hover:border-accent"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  }
+                  return (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className={`text-xs font-medium px-3 py-1.5 transition-colors border ${
+                        isActive
+                          ? "border-accent text-accent"
+                          : "text-muted hover:text-foreground border-border hover:border-border-light"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
               </div>
               {/* Mobile hamburger */}
               <div ref={menuRef} className="relative sm:hidden">
@@ -99,7 +124,11 @@ export default function Header({
                         key={item.label}
                         href={item.href}
                         onClick={() => setMenuOpen(false)}
-                        className="block w-full px-4 py-3 text-left text-sm font-medium text-muted hover:bg-background hover:text-foreground transition-colors"
+                        className={`block w-full px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-background ${
+                          item.primary
+                            ? "font-bold text-foreground hover:text-foreground"
+                            : "text-muted hover:text-foreground"
+                        }`}
                       >
                         {item.label}
                       </Link>

@@ -48,6 +48,8 @@ function FieldLabel({
   );
 }
 
+type LocationScope = "citywide" | "specific";
+
 export default function PolicyInput({
   onSubmit,
   selectedLocation,
@@ -63,14 +65,16 @@ export default function PolicyInput({
   const [endDate, setEndDate] = useState("");
   const [agency, setAgency] = useState("");
   const [locationInput, setLocationInput] = useState(selectedLocation || "");
+  const [locationScope, setLocationScope] = useState<LocationScope>("citywide");
+  const [noEndDate, setNoEndDate] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // Sync when map click updates selectedLocation
+  // Sync when map click updates selectedLocation (only in specific mode)
   useEffect(() => {
-    if (selectedLocation) {
+    if (selectedLocation && locationScope === "specific") {
       setLocationInput(selectedLocation);
     }
-  }, [selectedLocation]);
+  }, [selectedLocation, locationScope]);
 
   useEffect(() => {
     setPolicyTypes(getAllPolicyTypes());
@@ -209,41 +213,104 @@ export default function PolicyInput({
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-muted">End</label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-xs text-muted">End</label>
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-light hover:text-muted transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={!endDate && noEndDate}
+                    onChange={(e) => {
+                      setNoEndDate(e.target.checked);
+                      if (e.target.checked) setEndDate("");
+                    }}
+                    className="h-3 w-3 accent-accent"
+                  />
+                  N/A
+                </label>
+              </div>
               <input
                 type="date"
                 value={endDate}
+                disabled={noEndDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent"
+                className={`w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors focus:border-accent ${noEndDate ? "cursor-not-allowed opacity-40" : ""}`}
               />
             </div>
           </div>
         </div>
 
-        {/* Location — editable, geocodes on Enter */}
+        {/* Location — with scope toggle */}
         <div>
           <FieldLabel>Location</FieldLabel>
-          <input
-            type="text"
-            value={locationInput}
-            onChange={(e) => setLocationInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                geocodeLocation(locationInput);
+
+          {/* Scope toggle */}
+          <div className="mb-3 flex">
+            <button
+              type="button"
+              onClick={() => setLocationScope("citywide")}
+              className={`flex-1 border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                locationScope === "citywide"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-surface text-muted hover:text-foreground hover:border-border-light"
+              }`}
+            >
+              City-wide
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocationScope("specific")}
+              className={`flex-1 border-t border-b border-r px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                locationScope === "specific"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-surface text-muted hover:text-foreground hover:border-border-light"
+              }`}
+            >
+              Specific Location
+            </button>
+          </div>
+
+          {/* Text input — disabled when city-wide */}
+          <div className="relative">
+            <input
+              type="text"
+              value={locationScope === "citywide" ? "" : locationInput}
+              onChange={(e) => setLocationInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && locationScope === "specific") {
+                  e.preventDefault();
+                  geocodeLocation(locationInput);
+                }
+              }}
+              onBlur={() => {
+                if (
+                  locationScope === "specific" &&
+                  locationInput &&
+                  locationInput !== selectedLocation
+                ) {
+                  geocodeLocation(locationInput);
+                }
+              }}
+              disabled={locationScope === "citywide"}
+              placeholder={
+                locationScope === "citywide"
+                  ? "Applies to the entire city"
+                  : "Search or click the map"
               }
-            }}
-            onBlur={() => {
-              if (locationInput && locationInput !== selectedLocation) {
-                geocodeLocation(locationInput);
-              }
-            }}
-            placeholder="Search or click the map"
-            className="w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-light focus:border-accent"
-          />
-          {isGeocoding && (
-            <p className="mt-1 text-xs text-muted-light">Searching...</p>
-          )}
+              className={`w-full border border-border bg-surface px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-light focus:border-accent ${
+                locationScope === "citywide"
+                  ? "cursor-not-allowed bg-background text-muted-light opacity-60"
+                  : ""
+              }`}
+            />
+            {isGeocoding && locationScope === "specific" && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                <span
+                  className="inline-block h-2 w-2 rounded-full bg-accent"
+                  style={{ animation: "pulse-dot 1.2s ease-in-out infinite" }}
+                />
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Implementing Agency */}
@@ -276,9 +343,10 @@ export default function PolicyInput({
               description,
               startDate,
               endDate,
-              location: selectedLocation || "",
-              lat: selectedLat,
-              lng: selectedLng,
+              location:
+                locationScope === "citywide" ? "" : selectedLocation || "",
+              lat: locationScope === "citywide" ? undefined : selectedLat,
+              lng: locationScope === "citywide" ? undefined : selectedLng,
               agency,
             })
           }

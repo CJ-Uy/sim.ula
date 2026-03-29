@@ -11,7 +11,7 @@ export default function AddDataPage() {
     <div className="flex h-screen flex-col overflow-hidden">
       <Header hideNav />
       <main className="min-h-0 flex-1 overflow-hidden">
-        <IngestForm onBack={() => router.push("/")} />
+        <IngestForm onBack={() => router.push("/simulate")} />
       </main>
     </div>
   );

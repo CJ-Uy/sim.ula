@@ -25,27 +25,38 @@ export default function SimulationLoading({
 }: SimulationLoadingProps) {
   const [activeStep, setActiveStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const calledRef = useRef(false);
-  // Stable refs so the effect never re-runs or aborts due to prop reference changes
   const formDataRef = useRef(formData);
   const onCompleteRef = useRef(onComplete);
 
   const displayPolicy =
-    formData.description.length > 120
-      ? formData.description.slice(0, 120) + "\u2026"
+    formData.description.length > 110
+      ? formData.description.slice(0, 110) + "\u2026"
       : formData.description;
 
-  // Animate steps forward as time passes
+  // Timer — counts up every second
+  useEffect(() => {
+    const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  // Animate steps forward on a schedule
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
-    // Advance steps on a schedule, but the last step stays until the API responds
     for (let i = 1; i < STEPS.length; i++) {
       timers.push(setTimeout(() => setActiveStep(i), i * 2000));
     }
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  // Call the simulation API — runs exactly once per mount
+  // Call simulation API — runs exactly once per mount
   useEffect(() => {
     if (calledRef.current) return;
     calledRef.current = true;
@@ -72,7 +83,6 @@ export default function SimulationLoading({
         }
 
         const result = (await res.json()) as SimulationResult & { simulation_id: string };
-
         setActiveStep(STEPS.length);
         setTimeout(() => complete(result), 600);
       } catch (err: unknown) {
@@ -81,83 +91,153 @@ export default function SimulationLoading({
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const completedCount = Math.min(activeStep, STEPS.length);
+  const progressPct = (completedCount / STEPS.length) * 100;
+
   return (
     <div
-      className="mx-auto flex min-h-[70vh] w-full max-w-[520px] flex-col items-center justify-center px-6"
+      className="mx-auto flex min-h-[80vh] w-full max-w-145 flex-col items-center justify-center px-6"
       style={{ animation: "fade-in 300ms ease" }}
     >
-      <div className="w-full border border-border-light bg-surface p-8">
-        <p className="text-[13px] font-semibold uppercase tracking-wide text-foreground/70">
-          Processing Simulation
-        </p>
-        <p className="mt-2 text-sm italic text-muted">{displayPolicy}</p>
+      {/* ── BREAKING NEWS HEADER ── */}
+      <div className="w-full border-2 border-foreground bg-foreground flex items-center justify-between px-4 py-2">
+        <div className="flex items-center gap-2.5">
+          {!error ? (
+            <>
+              <span
+                className="h-2 w-2 shrink-0 rounded-full bg-red-400"
+                style={{ animation: "pulse-dot 1s ease-in-out infinite" }}
+              />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-background">
+                Live
+              </span>
+              <span className="mx-2 text-background/20">|</span>
+              <span className="text-[10px] uppercase tracking-[0.15em] text-background/70">
+                Policy Analysis in Progress
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">
+                Analysis Failed
+              </span>
+            </>
+          )}
+        </div>
+        <span className="font-mono text-sm font-bold tabular-nums text-background">
+          {formatTime(elapsed)}
+        </span>
+      </div>
 
-        <hr className="my-6 border-border-light" />
+      {/* ── CARD ── */}
+      <div className="w-full border border-t-0 border-border bg-surface px-7 py-7">
 
-        <div className="space-y-5">
-          {STEPS.map((step, i) => {
-            const isCompleted = i < activeStep;
-            const isActive = i === activeStep;
+        {/* Headline */}
+        <div className="mb-5">
+          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-red-500">
+            Breaking
+          </span>
+          <h2 className="mt-1 font-serif text-[1.25rem] font-bold leading-snug text-foreground">
+            {displayPolicy}
+          </h2>
+          <div className="mt-2 flex items-center gap-2">
+            <div className="h-px w-6 bg-border" />
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-light">
+              By sim.ula Intelligence Engine
+            </p>
+          </div>
+        </div>
 
-            return (
-              <div key={step} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+        <hr className="border-border-light" />
+
+        {/* Steps */}
+        <div className="mt-5">
+          <p className="mb-3 text-[9px] font-black uppercase tracking-[0.2em] text-muted">
+            Analysis Pipeline
+          </p>
+          <div className="space-y-3.5">
+            {STEPS.map((step, i) => {
+              const isCompleted = i < activeStep;
+              const isActive = i === activeStep && !error;
+              const isPending = i > activeStep;
+
+              return (
+                <div
+                  key={step}
+                  className={`flex items-center gap-3 transition-opacity duration-500 ${isPending ? "opacity-35" : ""}`}
+                >
+                  {/* Step indicator */}
                   <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center text-xs ${
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center text-[11px] font-bold transition-colors duration-300 ${
                       isCompleted
-                        ? "bg-accent text-white"
+                        ? "bg-foreground text-background"
                         : isActive
-                          ? "border border-accent text-accent"
+                          ? "border-2 border-foreground text-foreground"
                           : "border border-border text-muted-light"
                     }`}
                   >
-                    {isCompleted ? "\u2713" : i + 1}
+                    {isCompleted ? "✓" : i + 1}
                   </span>
+
+                  {/* Label */}
                   <span
-                    className={`text-sm ${
-                      isCompleted
-                        ? "text-foreground"
-                        : isActive
-                          ? "text-foreground"
-                          : "text-muted-light"
+                    className={`text-sm leading-tight transition-colors duration-300 ${
+                      isCompleted || isActive ? "text-foreground" : "text-muted-light"
                     }`}
                   >
                     {step}
                   </span>
+
+                  {/* Active pulse */}
+                  {isActive && (
+                    <span className="ml-auto flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-accent shrink-0">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-accent"
+                        style={{ animation: "pulse-dot 1.2s ease-in-out infinite" }}
+                      />
+                      Processing
+                    </span>
+                  )}
                 </div>
-                {isActive && !error && (
-                  <span
-                    className="ml-3 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-                    style={{
-                      animation: "pulse-dot 1.2s ease-in-out infinite",
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
+        {/* Progress bar */}
+        {!error && (
+          <div className="mt-6">
+            <div className="h-px w-full bg-border-light overflow-hidden">
+              <div
+                className="h-full bg-foreground transition-all duration-700 ease-out"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Error state */}
         {error && (
           <>
-            <hr className="my-6 border-border-light" />
+            <hr className="my-5 border-border-light" />
             <div className="space-y-3">
               <p className="text-sm text-red-500">{error}</p>
               <button
                 type="button"
                 onClick={onError}
-                className="text-sm font-medium text-accent hover:underline"
+                className="text-sm font-semibold text-accent hover:underline underline-offset-4"
               >
-                Back to form
+                ← Back to form
               </button>
             </div>
           </>
         )}
 
+        {/* Footer */}
         {!error && (
           <>
-            <hr className="my-6 border-border-light" />
-            <p className="text-xs text-muted-light">
+            <hr className="mt-5 border-border-light" />
+            <p className="mt-3 text-[10px] uppercase tracking-[0.15em] text-muted-light">
               Analyzing against historical policy knowledge graph
             </p>
           </>

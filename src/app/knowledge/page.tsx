@@ -11,7 +11,7 @@ export default function KnowledgePage() {
     <div className="flex h-screen flex-col overflow-hidden">
       <Header hideNav />
       <main className="min-h-0 flex-1 overflow-hidden">
-        <DocumentDashboard onBack={() => router.push("/")} />
+        <DocumentDashboard onBack={() => router.push("/simulate")} />
       </main>
     </div>
   );
