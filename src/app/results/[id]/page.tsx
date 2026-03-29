@@ -51,12 +51,12 @@ export default function ResultsPage() {
     fetch(`/api/simulate/get?id=${encodeURIComponent(id)}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`Not found`);
-        const data = await res.json();
-        setResult(data.result ?? data);
+        const data = await res.json() as Record<string, unknown>;
+        setResult((data.result ?? data) as SimulationResult & { simulation_id: string });
         setFormData({
           ...BLANK_FORM,
-          description: data.policy ?? "",
-          location: data.location ?? "",
+          description: (data.policy as string) ?? "",
+          location: (data.location as string) ?? "",
         });
       })
       .catch((err) => setError(err.message))
