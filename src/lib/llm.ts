@@ -1,8 +1,25 @@
 // src/lib/llm.ts
 import type { Env } from './types';
 
+// CF Workers AI models used as fallback
+const CF_LLM_MODEL = '@cf/meta/llama-3.1-8b-instruct' as const;
+const CF_EMBED_MODEL = '@cf/baai/bge-base-en-v1.5' as const;
+
+/** Quick probe — returns true if Ollama is reachable. */
+async function isOllamaAvailable(env: Env): Promise<boolean> {
+  try {
+    const res = await fetch(`${env.OLLAMA_URL}/api/tags`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Call Ollama LLM via Cloudflare tunnel (streaming).
+ * Falls back to Cloudflare Workers AI when Ollama is unreachable.
  * Pass modelOverride to use phi4:14b for high-quality batch ingestion.
  */
 export async function callLLM(
@@ -16,6 +33,24 @@ export async function callLLM(
     noFallback?: boolean;   // kept for backward compat, no longer used
   }
 ): Promise<string> {
+  const ollamaAvailable = await isOllamaAvailable(env);
+
+  if (!ollamaAvailable) {
+    // ── Cloudflare Workers AI fallback ───────────────────────────────────────
+    const fullPrompt = options?.format === 'json'
+      ? `${systemPrompt}\n\nRespond with valid JSON only, no prose.\n\n${prompt}`
+      : `${systemPrompt}\n\n${prompt}`;
+
+    const result = await env.AI.run(CF_LLM_MODEL, {
+      prompt: fullPrompt,
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: 4096,
+    } as Parameters<typeof env.AI.run>[1]);
+
+    return (result as { response: string }).response ?? '';
+  }
+
+  // ── Ollama (primary) ──────────────────────────────────────────────────────
   const model = options?.modelOverride ?? env.OLLAMA_MODEL;
   // Minimum 150s timeout — phi4 gets 3min, others use env or 150s floor
   const envTimeout = parseInt(env.OLLAMA_TIMEOUT_MS || '150000');
@@ -75,8 +110,19 @@ export async function callLLM(
 
 /**
  * Get text embedding via Ollama nomic-embed-text (768-dim).
+ * Falls back to Cloudflare Workers AI bge-base-en-v1.5 (also 768-dim).
  */
 export async function getEmbedding(env: Env, text: string): Promise<number[]> {
+  const ollamaAvailable = await isOllamaAvailable(env);
+
+  if (!ollamaAvailable) {
+    // ── Cloudflare Workers AI fallback ───────────────────────────────────────
+    const result = await env.AI.run(CF_EMBED_MODEL, { text: [text] } as Parameters<typeof env.AI.run>[1]);
+    const embedOutput = result as { data: number[][] };
+    return embedOutput.data[0];
+  }
+
+  // ── Ollama (primary) ──────────────────────────────────────────────────────
   const timeoutMs = parseInt(env.OLLAMA_TIMEOUT_MS || '60000');
 
   const controller = new AbortController();
@@ -101,6 +147,14 @@ export async function getEmbedding(env: Env, text: string): Promise<number[]> {
 
 /** Embed multiple texts sequentially (Ollama doesn't batch natively). */
 export async function getEmbeddings(env: Env, texts: string[]): Promise<number[][]> {
+  // Check once and reuse for the whole batch
+  const ollamaAvailable = await isOllamaAvailable(env);
+
+  if (!ollamaAvailable) {
+    const result = await env.AI.run(CF_EMBED_MODEL, { text: texts } as Parameters<typeof env.AI.run>[1]);
+    return (result as { data: number[][] }).data;
+  }
+
   const results: number[][] = [];
   for (const text of texts) {
     results.push(await getEmbedding(env, text));
