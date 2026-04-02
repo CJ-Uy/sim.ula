@@ -2,7 +2,7 @@
 import type { Env } from './types';
 
 // CF Workers AI models used as fallback
-const CF_LLM_MODEL = '@cf/meta/llama-3.1-8b-instruct' as const;
+const CF_LLM_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast' as const;
 const CF_EMBED_MODEL = '@cf/baai/bge-base-en-v1.5' as const;
 
 /** Quick probe — returns true if Ollama is reachable. */
@@ -45,7 +45,7 @@ export async function callLLM(
       prompt: fullPrompt,
       temperature: options?.temperature ?? 0.7,
       max_tokens: 4096,
-    } as Parameters<typeof env.AI.run>[1]);
+    } as Ai_Cf_Meta_Llama_3_3_70B_Instruct_Fp8_Fast_Prompt);
 
     return (result as { response: string }).response ?? '';
   }
@@ -117,7 +117,7 @@ export async function getEmbedding(env: Env, text: string): Promise<number[]> {
 
   if (!ollamaAvailable) {
     // ── Cloudflare Workers AI fallback ───────────────────────────────────────
-    const result = await env.AI.run(CF_EMBED_MODEL, { text: [text] } as Parameters<typeof env.AI.run>[1]);
+    const result = await env.AI.run(CF_EMBED_MODEL, { text: [text] } as Ai_Cf_Baai_Bge_Base_En_V1_5_Input);
     const embedOutput = result as { data: number[][] };
     return embedOutput.data[0];
   }
@@ -151,7 +151,7 @@ export async function getEmbeddings(env: Env, texts: string[]): Promise<number[]
   const ollamaAvailable = await isOllamaAvailable(env);
 
   if (!ollamaAvailable) {
-    const result = await env.AI.run(CF_EMBED_MODEL, { text: texts } as Parameters<typeof env.AI.run>[1]);
+    const result = await env.AI.run(CF_EMBED_MODEL, { text: texts } as Ai_Cf_Baai_Bge_Base_En_V1_5_Input);
     return (result as { data: number[][] }).data;
   }
 
